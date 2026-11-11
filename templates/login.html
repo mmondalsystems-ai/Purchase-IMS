@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Purchase IMS - Sign in</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+           font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif; background: #f4f7fb; color: #172033; }
+    .box { width: 92%; max-width: 380px; background: #fff; border: 1px solid #e4eaf2; border-radius: 18px;
+           padding: 32px 28px; text-align: center; box-shadow: 0 12px 32px rgba(23,32,51,.08); }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p  { margin: 0 0 22px; font-size: 13px; color: #718096; line-height: 1.5; }
+    #gbtn { display: flex; justify-content: center; min-height: 44px; }
+    #msg { margin-top: 16px; font-size: 13px; color: #c42431; min-height: 18px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Purchase IMS</h1>
+    <p>Sign in with your company Google account<br>(__ALLOWED_DOMAINS__)</p>
+    <div id="gbtn"></div>
+    <div id="msg"></div>
+  </div>
+  <script>
+    function onGoogleCredential(response) {
+      var msg = document.getElementById('msg');
+      msg.textContent = '';
+      fetch('/auth/google', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.ok) { window.location.href = '/'; }
+          else { msg.textContent = d.error || 'Sign-in failed.'; }
+        })
+        .catch(function () { msg.textContent = 'Network error. Please try again.'; });
+    }
+
+    window.onload = function () {
+      var tries = 0;
+      (function init() {
+        if (window.google && google.accounts && google.accounts.id) {
+          google.accounts.id.initialize({
+            client_id: '__GOOGLE_CLIENT_ID__',
+            callback: onGoogleCredential,
+            auto_select: false
+          });
+          google.accounts.id.renderButton(document.getElementById('gbtn'),
+            { theme: 'outline', size: 'large', text: 'signin_with', width: 280 });
+        } else if (tries++ < 50) {
+          setTimeout(init, 100);
+        } else {
+          document.getElementById('msg').textContent = 'Could not load Google sign-in. Check your internet connection.';
+        }
+      })();
+    };
+  </script>
+</body>
+</html>

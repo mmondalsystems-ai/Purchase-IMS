@@ -1,0 +1,224 @@
+"""
+End-to-end smoke test against a real database.
+
+    export DATABASE_URL=postgresql://...   (a TEST database, never production data)
+    python tests/smoke_test.py
+
+It signs in through the dev-only /auth/dev route (APP_ENV=dev), then walks a request
+through the whole workflow using the real approvers from the People / Stage Config tables.
+"""
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("APP_ENV", "dev")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+import app as app_module  # noqa: E402
+import db  # noqa: E402
+
+ADMIN = "bnaskar.systems@oswalgroup.net"
+passed = 0
+
+
+def check(cond, label):
+    global passed
+    if not cond:
+        raise AssertionError("FAILED: " + label)
+    passed += 1
+    print("  ok  " + label)
+
+
+def client_for(email):
+    c = TestClient(app_module.app, follow_redirects=False)
+    r = c.get("/auth/dev", params={"email": email})
+    assert r.status_code in (302, 307), r.text
+    return c
+
+
+def call(c, fn, *args):
+    r = c.post("/api/" + fn, json={"args": list(args)})
+    assert r.status_code == 200, (fn, r.status_code, r.text)
+    j = r.json()
+    assert j["ok"], (fn, j)
+    return j["result"]
+
+
+def people_email(name):
+    with db.connection() as conn:
+        row = conn.execute("select email from ims_people where lower(name) = lower(%s)", (name,)).fetchone()
+    return row["email"] if row else ""
+
+
+def main():
+    anon = TestClient(app_module.app, follow_redirects=False)
+    print("Auth")
+    check(anon.get("/").status_code in (302, 307), "anonymous / redirects to /login")
+    check(anon.post("/api/imsApprovalGetRequests", json={"args": []}).status_code == 401, "anonymous API call is rejected")
+    check(anon.get("/health").json() == {"ok": True}, "/health works")
+    check("Sign in" in anon.get("/login").text, "login page renders")
+
+    admin = client_for(ADMIN)
+    page = admin.get("/")
+    check(page.status_code == 200 and "/static/shim.js" in page.text and "google.script.run" in page.text, "app page served with shim")
+    check(admin.get("/static/shim.js").status_code == 200, "shim.js served")
+
+    print("Static lookups")
+    stages = call(admin, "imsApprovalGetStageConfigForClient")
+    check(len(stages) == 12 and stages[0]["key"] == "approval", "12 stages")
+    check(len(call(admin, "imsApprovalGetRequestableProjects")) == 6, "admin can raise for all 6 projects")
+    nobody = client_for("nobody@oswalgroup.net")
+    check(call(nobody, "imsApprovalGetRequestableProjects") == [], "unlisted user has no projects")
+    chinmoy = client_for(people_email("Chinmoy Sit"))
+    check(len(call(chinmoy, "imsApprovalGetRequestableProjects")) == 6, "listed user can raise for all projects")
+    check(len(call(admin, "imsApprovalGetMaterials")) > 3000, "materials list loaded")
+    check(len(call(admin, "imsApprovalGetVendors")) > 300, "vendors list loaded")
+    qty = call(admin, "imsApprovalGetQtyMasterForProject", "Orchard Amritaya")
+    check(len(qty) == 9411, "9411 quantity master rows for Orchard Amritaya")
+    check(call(admin, "imsApprovalGetQtyMasterForProject", "HO") == [], "HO has no quantity master rows")
+
+    print("New Entry: Planned (quantity master deduction)")
+    row = next(r for r in qty if isinstance(r["remaining"], (int, float)) and r["remaining"] > 0 and r["block"] and r["lot"])
+    first_dup = [r for r in qty if (r["constructionType"], r["block"], r["lot"], r["materialName"]) ==
+                 (row["constructionType"], row["block"], row["lot"], row["materialName"])][0]
+    payload = {"project": "Orchard Amritaya", "planned": "Planned", "constructionType": row["constructionType"],
+               "block": row["block"], "lot": row["lot"], "materialName": row["materialName"],
+               "materialType": "SITE MATERIAL", "quantity": first_dup["remaining"], "estimatedDeliveryDate": "2026-12-01",
+               "remarks": "smoke test", "entryStatus": "Done"}
+    res = call(admin, "imsApprovalSubmitRequest", payload)
+    check(res["success"] and res["qtySynced"] and res["remainingAfter"] == 0, "Planned submit deducts whole Remaining -> 0")
+    sr1 = res["srNo"]
+    res2 = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=1))
+    check(not res2["success"] and "more than the Remaining" in res2["error"], "second submit is rejected (nothing remaining)")
+    res3 = call(nobody, "imsApprovalSubmitRequest", dict(payload, quantity=1))
+    check(not res3["success"] and "permission" in res3["error"], "user without New Entry Permission is rejected")
+    bad = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=0))
+    check(not bad["success"] and "greater than 0" in bad["error"], "quantity 0 is rejected")
+
+    print("Draft entry and Start Approval Flow")
+    draft = call(chinmoy, "imsApprovalSubmitRequest", {
+        "project": "HO", "planned": "Non Planned", "materialName": "CEMENT", "materialType": "HO",
+        "quantity": 25, "entryStatus": "Not Done", "remarks": "draft"})
+    check(draft["success"] and draft["qtySynced"] is False, "Non Planned draft saved, no master sync")
+    sr2 = draft["srNo"]
+    reqs = call(admin, "imsApprovalGetRequests")
+    r2 = next(r for r in reqs if r["srNo"] == sr2)
+    check(r2["entryStatus"] == "Not Done" and r2["stages"]["approval"]["planned"] == "", "draft has no planned dates")
+    check(not call(nobody, "imsApprovalStartFlow", sr2)["success"], "stranger cannot start someone else's draft")
+    check(call(chinmoy, "imsApprovalStartFlow", sr2)["success"], "requester starts the flow")
+    check(not call(chinmoy, "imsApprovalStartFlow", sr2)["success"], "starting twice is rejected")
+
+    print("Full workflow for request #%d (Planned, SITE MATERIAL, Advance Payment = Yes)" % sr1)
+    extras_for = {
+        "indent": {"indentNo": "IND-001"},
+        "poRate": {"remarks": "rate ok"},
+        "poEntry": {"vendorName": call(admin, "imsApprovalGetVendors")[0], "poAmount": "75000"},
+        "poMaking": {"poNo": "PO-77", "advancePaymentRequired": "Yes"},
+        "delivery": {"challanBillNo": "CH-9"},
+    }
+    expected_rate_approver = "Bikash Haldar"  # SITE MATERIAL, 75,000 <= 100,000
+    for st in stages:
+        key = st["key"]
+        reqs = call(admin, "imsApprovalGetRequests")
+        r = next(x for x in reqs if x["srNo"] == sr1)
+        approver = r["stages"][key]["approver"]
+        if key == "rateApproval":
+            check(approver == expected_rate_approver, "Rate Approval approver computed -> %s" % approver)
+        check(bool(approver), "%s has an approver (%s)" % (key, approver))
+        email = people_email(approver)
+        user = client_for(email)
+        queue = call(user, "imsApprovalGetMyQueue")
+        check(any(q["srNo"] == sr1 and q["stageKey"] == key and q["canAct"] for q in queue), "%s appears in %s's queue" % (key, approver))
+        check(key in call(user, "imsApprovalGetMyStageKeys"), "%s is in %s's stage keys" % (key, approver))
+        outsider = client_for(people_email("Sandip Das") if approver != "Sandip Das" else people_email("Amar Sharma"))
+        if key not in ("approval",):
+            pass
+        wrong = call(outsider, "imsApprovalActOnStage", {"srNo": sr1, "stageKey": key, "extraFields": extras_for.get(key, {})})
+        outsider_is_backup = (not wrong["success"]) is False
+        if not outsider_is_backup:
+            check("not the assigned approver" in wrong["error"] or "Previous stage" in wrong["error"], "%s: a non-assigned user is rejected" % key)
+        # prior stage gating: acting on a later stage out of order must fail
+        res = call(user, "imsApprovalActOnStage", {"srNo": sr1, "stageKey": key, "extraFields": extras_for.get(key, {})})
+        check(res["success"], "%s approved by %s" % (key, approver))
+        again = call(user, "imsApprovalActOnStage", {"srNo": sr1, "stageKey": key, "extraFields": {}})
+        check(not again["success"] and "already marked" in again["error"], "%s cannot be approved twice" % key)
+
+    reqs = call(admin, "imsApprovalGetRequests")
+    r1 = next(x for x in reqs if x["srNo"] == sr1)
+    check(r1["overallStatus"] == "Done", "overall status flips to Done after Truck Entry")
+    check(r1["stages"]["poEntry"]["poAmount"] == 75000 and r1["stages"]["delivery"]["challanBillNo"] == "CH-9", "extra fields saved")
+    check(r1["stages"]["advancePayment"]["planned"] != "", "Advance Payment planned date set because poMaking = Yes")
+    check(r1["stages"]["approval"]["delay"] != "" and r1["stages"]["approval"]["approvedBy"] != "", "delay and approved-by recorded")
+
+    print("Skipping Advance Payment when poMaking = No (request #%d)" % sr2)
+    r2 = next(x for x in call(admin, "imsApprovalGetRequests") if x["srNo"] == sr2)
+    for st in stages:
+        key = st["key"]
+        if key == "advancePayment":
+            blocked = call(admin, "imsApprovalActOnStage", {"srNo": sr2, "stageKey": key, "extraFields": {}})
+            check(not blocked["success"], "Advance Payment cannot be approved when not required")
+            continue
+        ex = {"poEntry": {"vendorName": "ABC", "poAmount": "120000"},
+              "poMaking": {"poNo": "PO-78", "advancePaymentRequired": "No"}}.get(key, {})
+        res = call(admin, "imsApprovalActOnStage", {"srNo": sr2, "stageKey": key, "extraFields": ex})
+        check(res["success"], "admin approves %s" % key)
+    r2 = next(x for x in call(admin, "imsApprovalGetRequests") if x["srNo"] == sr2)
+    check(r2["overallStatus"] == "Done", "request finishes without the Advance Payment stage")
+    check(r2["stages"]["rateApproval"]["approver"] == "Managing Director", "HO + 120,000 -> Managing Director")
+
+    print("poMaking needs an explicit Yes/No")
+    d = call(admin, "imsApprovalSubmitRequest", {"project": "Titagarh", "planned": "Non Planned", "materialName": "SAND",
+                                                  "materialType": "SITE MATERIAL", "quantity": 5, "entryStatus": "Done"})
+    sr3 = d["srNo"]
+    for key in ["approval", "approval2", "wbs", "indent", "poRate", "poEntry", "rateApproval"]:
+        ex = {"poEntry": {"vendorName": "ABC", "poAmount": "1000"}}.get(key, {})
+        check(call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": key, "extraFields": ex})["success"], "sr3 %s" % key)
+    out_of_order = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "delivery", "extraFields": {}})
+    check(not out_of_order["success"] and "Previous stage" in out_of_order["error"], "stages cannot be skipped")
+    nochoice = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "poMaking", "extraFields": {"poNo": "X"}})
+    check(not nochoice["success"] and "Yes or No" in nochoice["error"], "Advance Payment Required must be chosen")
+
+    print("Bulk approval")
+    ids = []
+    for _ in range(3):
+        ids.append(call(admin, "imsApprovalSubmitRequest", {"project": "HO", "planned": "Non Planned", "materialName": "BRICK",
+                                                             "materialType": "HO", "quantity": 100, "entryStatus": "Done"})["srNo"])
+    approval_user = client_for(people_email("Tulika Saha"))  # approval approver for HO
+    bulk = call(approval_user, "imsApprovalActOnStages", {"items": [{"srNo": i, "stageKey": "approval"} for i in ids]})
+    check(bulk["success"] and bulk["successCount"] == 3, "bulk approved 3 requests")
+    bulk2 = call(approval_user, "imsApprovalActOnStages", {"items": [{"srNo": ids[0], "stageKey": "approval"}]})
+    check(not bulk2["success"] and bulk2["failureCount"] == 1, "bulk reports failures per item")
+
+    print("Cancel (restores quantity master)")
+    qty2 = next(r for r in call(admin, "imsApprovalGetQtyMasterForProject", "Orchard Amritaya")
+                if isinstance(r["remaining"], (int, float)) and r["remaining"] >= 2 and r["block"] and r["lot"]
+                and r["materialName"] != row["materialName"])
+    sub = call(chinmoy, "imsApprovalSubmitRequest", {"project": "Orchard Amritaya", "planned": "Planned", "constructionType": qty2["constructionType"],
+                                                      "block": qty2["block"], "lot": qty2["lot"], "materialName": qty2["materialName"],
+                                                      "materialType": "SITE MATERIAL", "quantity": 2, "entryStatus": "Done"})
+    check(sub["success"] and sub["remainingAfter"] == qty2["remaining"] - 2, "partial quantity deducted")
+    check(not call(nobody, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "x"})["success"], "stranger cannot cancel")
+    check(not call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": ""})["success"], "cancel reason is required")
+    c = call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "wrong item", "cancelDate": "2026-11-05"})
+    check(c["success"] and c["qtyRestored"] and c["remainingAfter"] == qty2["remaining"], "cancel restores Remaining")
+    check(not call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "again"})["success"], "cannot cancel twice")
+    check(not call(admin, "imsApprovalActOnStage", {"srNo": sub["srNo"], "stageKey": "approval", "extraFields": {}})["success"], "cancelled request cannot be approved")
+    cancelled = next(r for r in call(admin, "imsApprovalGetRequests") if r["srNo"] == sub["srNo"])
+    check(cancelled["cancelled"] and cancelled["cancelReason"] == "wrong item" and cancelled["cancelledAt"].startswith("05-Nov-2026"), "cancel details stored")
+    check(all(q["srNo"] != sub["srNo"] for q in call(admin, "imsApprovalGetMyQueue")), "cancelled request is not in anyone's queue")
+
+    print("Test As (admin only)")
+    info = call(admin, "imsApprovalGetCurrentUserInfo", people_email("Atanu Jana"))
+    check(info["testing"] and info["email"] == people_email("Atanu Jana") and info["realIsAdmin"], "admin can test as another user")
+    info2 = call(chinmoy, "imsApprovalGetCurrentUserInfo", ADMIN)
+    check(not info2["testing"] and not info2["isAdmin"], "non-admin cannot use Test As")
+    q_as = call(admin, "imsApprovalGetMyQueue", people_email("Atanu Jana"))
+    check(all(q["canAct"] for q in q_as), "Test As queue only has items that user can act on")
+
+    print("\nALL %d CHECKS PASSED" % passed)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --navy: #0f2249;
+      --navy-light: #16305e;
+      --primary: #2c5aa0;
+      --primary-dark: #1e3f73;
+      --done: #1e8e3e;
+      --pending: #b26a00;
+      --danger: #d93025;
+      --bg: #f2f4f8;
+      --card-bg: #ffffff;
+      --border: #e5e8ee;
+      --text: #1f2a37;
+      --text-muted: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Roboto, Arial, sans-serif; background: var(--bg); margin: 0; color: var(--text); }
+    a { text-decoration: none; color: inherit; }
+
+    /* Layout */
+    #app { display: flex; min-height: 100vh; }
+    #sidebar { width: 220px; background: var(--navy); color: #cfd8ea; flex-shrink: 0; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+    #sidebar .brand { padding: 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    #sidebar .brand .icon { font-size: 22px; }
+    #sidebar .brand .name { color: #fff; font-weight: 700; font-size: 16px; line-height: 1.1; }
+    #sidebar .brand .sub { font-size: 10.5px; color: #8fa0c2; }
+    #sidebar nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    #sidebar .nav-item { display: flex; align-items: center; gap: 10px; padding: 11px 18px; font-size: 13.5px; cursor: pointer; color: #b9c4dd; border-left: 3px solid transparent; }
+    #sidebar .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    #sidebar .nav-item.active { background: var(--navy-light); color: #fff; border-left-color: #4d8ff0; font-weight: 600; }
+    #sidebar .footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; color: #8fa0c2; }
+    #sidebar .footer b { color: #fff; display: block; font-size: 12.5px; }
+
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #topbar { background: var(--navy); color: #fff; padding: 12px 24px; display: flex; align-items: center; gap: 18px; }
+    #topbar .app-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; padding-right: 16px; border-right: 1px solid rgba(255,255,255,0.2); }
+    #topbar .search { flex: 1; max-width: 420px; }
+    #topbar .search input { width: 100%; padding: 8px 12px; border-radius: 8px; border: none; background: rgba(255,255,255,0.12); color: #fff; font-size: 13px; }
+    #topbar .search input::placeholder { color: #b9c4dd; }
+    #topbar .spacer { flex: 1; }
+    #topbar .user-chip { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+    #topbar .avatar { width: 30px; height: 30px; border-radius: 50%; background: #4d8ff0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+
+    #content { padding: 22px 26px 60px; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
+    .page-title { font-size: 21px; font-weight: 700; margin: 0; }
+    .page-sub { font-size: 13px; color: var(--text-muted); margin: 3px 0 0; }
+
+    .btn { background: var(--primary); color: #fff; border: none; padding: 10px 16px; border-radius: 7px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+    .btn:hover { background: var(--primary-dark); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.small { padding: 6px 12px; font-size: 12px; }
+    .btn.outline { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+    @media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; }
+    .stat-card .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
+    .stat-card .stat-value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .field input, .field select, .field textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; background: #fff; }
+    .field input:disabled, .field select:disabled { background: #f2f4f8; color: var(--text-muted); cursor: not-allowed; }
+    .field-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+    .inline-row { display: flex; gap: 8px; }
+    .inline-row .btn { flex-shrink: 0; }
+
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; }
+    .msg.success { display: block; background: #e6f4ea; color: var(--done); }
+    .msg.error { display: block; background: #fce8e6; color: var(--danger); }
+
+    table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.data-table th { text-align: left; padding: 10px 12px; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+    table.data-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); }
+    table.data-table tr:last-child td { border-bottom: none; }
+
+    .pill { display: inline-block; padding: 3px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+    .pill.done { background: #e6f4ea; color: var(--done); }
+    .pill.pending { background: #fff4e0; color: var(--pending); }
+    .pill.skipped { background: #eceff1; color: var(--text-muted); }
+
+    .req-card { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; background: var(--card-bg); }
+    .req-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; cursor: pointer; background: #fafbfc; }
+    .req-title { font-weight: 700; font-size: 14.5px; margin-top: 4px; }
+    .req-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .req-progress { font-size: 12px; color: var(--primary); font-weight: 600; }
+    .req-body { display: none; padding: 6px 18px 18px; }
+    .req-body.open { display: block; }
+
+    .stage-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .stage-row:first-child { border-top: none; }
+    .stage-name-col { flex: 0 0 190px; }
+    .stage-name { font-size: 13.5px; font-weight: 600; }
+    .stage-approver { font-size: 11.5px; color: var(--text-muted); }
+    .stage-dates { flex: 1; display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); min-width: 200px; }
+    .stage-dates b { color: var(--text); }
+    .stage-action { flex: 0 0 auto; }
+    .delay-neg { color: var(--done); font-weight: 700; }
+    .delay-pos { color: var(--danger); font-weight: 700; }
+
+    .restricted-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--border); }
+    .restricted-row:first-child { border-top: none; }
+    .restricted-row .stage-name { font-size: 13.5px; font-weight: 600; color: var(--text-muted); }
+    .restricted-note { font-size: 11px; color: var(--text-muted); font-style: italic; }
+
+    .queue-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; background: var(--card-bg); display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .queue-card.selected { border-color: var(--primary); background: #f8fbff; }
+    .queue-select { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 auto; }
+    .queue-select input { width: 17px; height: 17px; cursor: pointer; }
+    .queue-select-placeholder { width: 30px; flex: 0 0 auto; }
+    .queue-main { flex: 1; min-width: 200px; }
+    .bulk-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding: 12px 14px; background: #fff; border: 1px solid var(--border); border-radius: 10px; }
+    .bulk-toolbar .bulk-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .bulk-toolbar label { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text); }
+    .bulk-toolbar input { width: 16px; height: 16px; }
+    .bulk-count { font-size: 12px; color: var(--text-muted); }
+    .bulk-note { font-size: 12px; color: var(--text-muted); }
+    .card-id-badge { display: inline-block; background: #eef2fb; color: var(--primary); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 5px; margin-right: 8px; }
+    .card-project-tag { display: inline-block; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+    .queue-title { font-weight: 700; font-size: 14.5px; margin-top: 4px; }
+    .queue-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .queue-stage { font-size: 12.5px; color: var(--primary); font-weight: 600; margin-top: 3px; }
+
+    .stage-section { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; overflow: hidden; background: var(--card-bg); }
+    .stage-section-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; cursor: pointer; background: #fafbfc; }
+    .stage-section-title { font-weight: 700; font-size: 14.5px; }
+    .stage-section-count { font-size: 12px; color: var(--primary); font-weight: 600; }
+    .stage-section-body { display: none; padding: 12px 18px 16px; }
+    .stage-section-body.open { display: block; }
+    .draft-note { font-size: 11.5px; color: var(--text-muted); font-style: italic; margin-top: 4px; }
+
+    .stage-tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .stage-tile { position: relative; border-radius: 16px; padding: 20px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .stage-tile-icon { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: rgba(255,255,255,0.6); margin-bottom: 12px; }
+    .stage-tile-title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+    .stage-tile-desc { font-size: 12.5px; color: #444; line-height: 1.5; }
+    .stage-tile-expand { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.7);
+      display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; }
+    .stage-tile-expand svg { width: 15px; height: 15px; }
+    .stage-tile.c0 { background: linear-gradient(135deg, #e9e5fb, #f3f1fd); }
+    .stage-tile.c1 { background: linear-gradient(135deg, #ddf5e6, #eefaf1); }
+    .stage-tile.c2 { background: linear-gradient(135deg, #ffe9d6, #fff3e8); }
+    .stage-tile.c3 { background: linear-gradient(135deg, #dbe9ff, #ecf3ff); }
+
+    .activity-item { display: flex; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 12.5px; }
+    .activity-item:first-child { border-top: none; }
+    .activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 4px; flex-shrink: 0; }
+    .activity-sub { color: var(--text-muted); font-size: 11px; }
+
+    .master-list-item { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+    .master-list-item:first-child { border-top: none; }
+
+    .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border); background: #fff; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+    .chip:hover { border-color: var(--primary); }
+    .chip.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .empty-state { text-align: center; color: var(--text-muted); padding: 40px 10px; font-size: 14px; }
+    .spinner { border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; width: 22px; height: 22px; animation: spin 0.7s linear infinite; margin: 20px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 50; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #fff; border-radius: 10px; padding: 22px; width: 92%; max-width: 420px; max-height: 85vh; overflow-y: auto; }
+    .modal h3 { margin: 0 0 14px; font-size: 16px; }
+
+
+    /* =========================================================
+       OSWAL PURCHASE IMS — PREMIUM UI REFRESH
+       Visual-only redesign. Existing IDs / Apps Script logic stay intact.
+       ========================================================= */
+    :root {
+      --navy: #07152f;
+      --navy-light: #0e2449;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --done: #0f9f6e;
+      --pending: #d97706;
+      --danger: #dc2626;
+      --bg: #f4f7fb;
+      --card-bg: rgba(255,255,255,.96);
+      --border: #e4eaf2;
+      --text: #172033;
+      --text-muted: #718096;
+      --shadow-sm: 0 2px 10px rgba(23,32,51,.05);
+      --shadow-md: 0 12px 32px rgba(23,32,51,.08);
+      --shadow-lg: 0 24px 70px rgba(6,21,47,.18);
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(37,99,235,.08), transparent 28%),
+        radial-gradient(circle at 12% 100%, rgba(15,159,110,.05), transparent 26%),
+        var(--bg);
+      color: var(--text);
+      letter-spacing: .01em;
+    }
+    body, input, select, textarea, button { font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif; }
+    ::selection { background: #bfdbfe; color: #0f172a; }
+    * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    *::-webkit-scrollbar { width: 8px; height: 8px; }
+    *::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; }
+
+    /* App shell */
+    #app { min-height: 100vh; }
+    #sidebar {
+      width: 250px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,0)),
+        linear-gradient(180deg, #081936 0%, #07152f 100%);
+      border-right: 1px solid rgba(255,255,255,.06);
+      box-shadow: 12px 0 40px rgba(7,21,47,.08);
+      z-index: 30;
+      transition: transform .25s ease, width .25s ease;
+    }
+    #sidebar::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 180px;
+      background: radial-gradient(circle at 20% 20%, rgba(59,130,246,.20), transparent 65%);
+      pointer-events: none;
+    }
+    #sidebar .brand {
+      position: relative;
+      padding: 24px 20px 22px;
+      min-height: 84px;
+      gap: 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    #sidebar .brand .icon {
+      width: 42px; height: 42px; border-radius: 13px;
+      display: grid; place-items: center;
+      font-size: 20px;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      box-shadow: 0 10px 25px rgba(37,99,235,.35), inset 0 1px 0 rgba(255,255,255,.25);
+    }
+    #sidebar .brand .name { font-size: 17px; letter-spacing: .3px; }
+    #sidebar .brand .sub { margin-top: 4px; color: #91a5ca; font-size: 10px; text-transform: uppercase; letter-spacing: .9px; }
+    #sidebar nav { padding: 16px 12px; }
+    #sidebar .nav-item {
+      min-height: 44px;
+      margin: 5px 0;
+      padding: 11px 13px;
+      border: 1px solid transparent;
+      border-left: 1px solid transparent;
+      border-radius: 11px;
+      color: #aebbd4;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background .18s ease, color .18s ease, transform .18s ease, border-color .18s ease;
+    }
+    #sidebar .nav-item:hover {
+      background: rgba(255,255,255,.065);
+      color: #fff;
+      transform: translateX(2px);
+    }
+    #sidebar .nav-item.active {
+      background: linear-gradient(135deg, rgba(59,130,246,.28), rgba(37,99,235,.15));
+      color: #fff;
+      border-color: rgba(96,165,250,.20);
+      box-shadow: inset 3px 0 0 #60a5fa, 0 8px 22px rgba(0,0,0,.08);
+      font-weight: 700;
+    }
+    #sidebar .footer {
+      margin: 10px 12px 14px;
+      padding: 14px 14px;
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px;
+      background: rgba(255,255,255,.035);
+      color: #8798b8;
+      line-height: 1.5;
+    }
+    #sidebar .footer b { margin-bottom: 2px; font-size: 13px; }
+
+    #main { min-height: 100vh; }
+    #topbar {
+      position: sticky; top: 0; z-index: 20;
+      min-height: 68px;
+      padding: 12px 28px;
+      background: rgba(255,255,255,.90);
+      color: var(--text);
+      border-bottom: 1px solid rgba(226,232,240,.95);
+      box-shadow: 0 4px 20px rgba(15,23,42,.035);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+    }
+    #topbar .app-title {
+      min-width: 148px;
+      border-right: 1px solid var(--border);
+      color: #0f2d5c;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: .15px;
+    }
+    #topbar .search { max-width: 510px; }
+    #topbar .search input {
+      height: 42px;
+      padding: 0 15px 0 15px;
+      border: 1px solid #dce4ef;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: var(--text);
+      outline: none;
+      transition: .2s ease;
+    }
+    #topbar .search input::placeholder { color: #94a3b8; }
+    #topbar .search input:focus {
+      background: #fff;
+      border-color: #8bb7ff;
+      box-shadow: 0 0 0 4px rgba(37,99,235,.08);
+    }
+    #topbar .user-chip {
+      min-height: 42px;
+      padding: 5px 9px 5px 6px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      color: #475569;
+      box-shadow: var(--shadow-sm);
+      max-width: 280px;
+    }
+    #topbar .avatar {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #1d4ed8, #60a5fa);
+      box-shadow: 0 5px 12px rgba(37,99,235,.22);
+      color: white;
+    }
+    #userEmailLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 205px; }
+    #mobileMenuBtn {
+      display: none;
+      width: 40px; height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: #fff;
+      color: #0f2d5c;
+      cursor: pointer;
+      font-size: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    #mobileOverlay { display:none; }
+
+    #content { padding: 30px 32px 70px; max-width: 1640px; width: 100%; margin: 0 auto; }
+    .page { animation: pageIn .22s ease; }
+    @keyframes pageIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    .page-header { margin-bottom: 22px; align-items: center; }
+    .page-title {
+      font-size: 25px;
+      line-height: 1.18;
+      letter-spacing: -.45px;
+      color: #111827;
+      font-weight: 800;
+    }
+    .page-sub { margin-top: 6px; color: #778399; font-size: 13px; }
+
+    /* Buttons */
+    .btn {
+      min-height: 39px;
+      padding: 9px 16px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2f6fed, #1f57ca);
+      box-shadow: 0 7px 16px rgba(37,99,235,.18);
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .btn:hover { background: linear-gradient(135deg, #2a63da, #194bb7); transform: translateY(-1px); box-shadow: 0 10px 20px rgba(37,99,235,.24); }
+    .btn:active { transform: translateY(0); box-shadow: 0 4px 10px rgba(37,99,235,.16); }
+    .btn.small { min-height: 32px; padding: 6px 12px; border-radius: 8px; }
+    .btn.outline {
+      color: #2458b6;
+      background: #fff;
+      border: 1px solid #cbd9ee;
+      box-shadow: none;
+    }
+    .btn.outline:hover { background: #f7faff; border-color: #9eb9e6; }
+    .btn.danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 7px 16px rgba(220,38,38,.20);
+    }
+    .btn.danger:hover { background: linear-gradient(135deg, #e23a3a, #c81f1f); box-shadow: 0 10px 20px rgba(220,38,38,.26); }
+
+    /* Dashboard stats */
+    .stat-grid { gap: 16px; margin-bottom: 22px; }
+    .stat-card {
+      position: relative;
+      min-height: 112px;
+      overflow: hidden;
+      padding: 19px;
+      border: 1px solid #e6ebf2;
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(255,255,255,.99), rgba(248,250,252,.92));
+      box-shadow: var(--shadow-sm);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .stat-card::after {
+      content:"";
+      position:absolute; right:-24px; top:-24px;
+      width:88px; height:88px; border-radius:50%;
+      background: radial-gradient(circle, rgba(37,99,235,.07), transparent 70%);
+      pointer-events:none;
+    }
+    .stat-card:hover { transform: translateY(-2px); border-color:#d6e2f2; box-shadow: var(--shadow-md); }
+    .stat-card .stat-icon {
+      width: 44px; height:44px;
+      border-radius: 13px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.55);
+      font-size: 19px;
+    }
+    .stat-card .stat-label { font-size: 11.5px; font-weight:700; letter-spacing:.25px; text-transform:uppercase; color:#7b879b; }
+    .stat-card .stat-value { margin-top:6px; font-size:24px; letter-spacing:-.5px; color:#111827; }
+
+    /* Cards / forms */
+    .card {
+      border: 1px solid #e4eaf2;
+      border-radius: 18px;
+      padding: 20px;
+      background: var(--card-bg);
+      box-shadow: var(--shadow-sm);
+    }
+    #page-newEntry .card { max-width: 860px !important; padding: 24px; }
+    #page-newEntry .card::before {
+      content: "Purchase Request Details";
+      display: block;
+      margin: -2px 0 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+      font-weight: 800;
+      color: #1e3a67;
+    }
+    .field { margin-bottom: 17px; }
+    .field label { margin-bottom: 7px; color:#364153; font-size:12.5px; }
+    .field input, .field select, .field textarea,
+    #vendorSearchInput, #materialSearchInput, #poSearchInput, #indentSearchInput, #challanSearchInput {
+      min-height: 42px;
+      padding: 10px 12px !important;
+      border: 1px solid #d9e1ec !important;
+      border-radius: 10px !important;
+      background: #fbfcfe;
+      color: #172033;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .field textarea { min-height: 92px; resize: vertical; }
+    .field input:focus, .field select:focus, .field textarea:focus,
+    #vendorSearchInput:focus, #materialSearchInput:focus, #poSearchInput:focus, #indentSearchInput:focus, #challanSearchInput:focus {
+      background: #fff;
+      border-color: #8bb7ff !important;
+      box-shadow: 0 0 0 4px rgba(37,99,235,.075);
+    }
+    .field input:disabled, .field select:disabled { background:#f1f5f9; color:#94a3b8; }
+    .field-hint { line-height:1.5; color:#8390a4; }
+    .chip-group { gap: 9px; }
+    .chip {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border-color: #dce4ee;
+      background: #fbfcfe;
+      box-shadow: 0 1px 1px rgba(15,23,42,.02);
+      transition: .16s ease;
+    }
+    .chip:hover { background:#f5f9ff; border-color:#91b6f3; color:#1e4fa5; transform:translateY(-1px); }
+    .chip.selected {
+      background: linear-gradient(135deg, #2f6fed, #2156c5);
+      border-color: transparent;
+      color:#fff;
+      box-shadow: 0 6px 14px rgba(37,99,235,.20);
+    }
+
+    /* Messages / pills */
+    .msg { border-radius: 10px; padding: 11px 13px; border:1px solid transparent; }
+    .msg.success { background:#ecfdf5; color:#08775a; border-color:#c8f4df; }
+    .msg.error { background:#fff1f2; color:#c42431; border-color:#ffd8dc; }
+    .pill { padding: 4px 10px; border-radius: 999px; font-size: 10.5px; letter-spacing:.2px; }
+    .pill.done { background:#e8fbf3; color:#0a805c; border:1px solid #c9f1df; }
+    .pill.pending { background:#fff8e8; color:#a85f00; border:1px solid #f6e3b5; }
+    .pill.skipped { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+    .pill.cancelled { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+
+    /* Tables / lists */
+    table.data-table { overflow:hidden; border-radius:12px; }
+    table.data-table th {
+      padding: 12px 13px;
+      background:#f8fafc;
+      border-bottom:1px solid #e4eaf2;
+      color:#7a8799;
+      font-size:10.5px;
+    }
+    table.data-table td { padding: 12px 13px; color:#344054; }
+    table.data-table tbody tr { transition: background .15s ease; }
+    table.data-table tbody tr:hover { background:#f8fbff; }
+    .master-list-item { padding: 12px 2px; }
+    .master-list-item:hover { background:#fafcff; }
+
+    /* Request cards */
+    .req-card, .stage-section {
+      border:1px solid #e2e8f0;
+      border-radius:16px;
+      box-shadow: var(--shadow-sm);
+      overflow:hidden;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+    .req-card:hover { border-color:#d2deed; box-shadow:0 10px 28px rgba(23,32,51,.07); }
+    .req-card.is-cancelled { opacity: .72; }
+    .req-header, .stage-section-header {
+      padding: 16px 18px;
+      background: linear-gradient(180deg,#ffffff,#fbfcfe);
+    }
+    .req-title { margin-top:6px; color:#172033; font-size:15px; }
+    .req-sub { line-height:1.55; color:#7b8798; }
+    .req-progress { padding:7px 10px; border-radius:9px; background:#eff6ff; color:#2458b6; }
+    .req-body { background:#fcfdff; padding: 4px 18px 18px; }
+    .stage-row { padding:14px 0; }
+    .stage-name { color:#2b3648; }
+    .stage-approver { margin-top:4px; }
+    .restricted-row { padding:13px 0; }
+    .card-id-badge { background:#edf4ff; color:#2458b6; border:1px solid #dceaff; border-radius:7px; }
+    .card-project-tag { color:#6f7d91; }
+
+    /* Approval stage tiles */
+    .stage-tile-grid { gap:18px; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+    .stage-tile {
+      min-height: 176px;
+      padding:22px;
+      border:1px solid rgba(255,255,255,.85);
+      border-radius:20px;
+      box-shadow: 0 10px 24px rgba(28,43,73,.07);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .stage-tile:hover { transform: translateY(-3px); box-shadow:0 16px 34px rgba(28,43,73,.12); }
+    .stage-tile-icon {
+      width:48px; height:48px; border-radius:14px;
+      background:rgba(255,255,255,.78);
+      box-shadow:0 7px 18px rgba(15,23,42,.07);
+    }
+    .stage-tile-title { font-size:15px; color:#172033; }
+    .stage-tile-desc { color:#5f6c80; line-height:1.55; }
+    .stage-tile-expand {
+      width:34px; height:34px; border-radius:10px;
+      background:rgba(255,255,255,.83);
+      box-shadow:0 5px 14px rgba(15,23,42,.07);
+      transition:.16s ease;
+    }
+    .stage-tile-expand:hover { transform:scale(1.06); background:#fff; }
+    .stage-tile.c0 { background:linear-gradient(145deg,#eef2ff,#f7f8ff); }
+    .stage-tile.c1 { background:linear-gradient(145deg,#e9fbf3,#f6fdf9); }
+    .stage-tile.c2 { background:linear-gradient(145deg,#fff2e7,#fff9f3); }
+    .stage-tile.c3 { background:linear-gradient(145deg,#eaf4ff,#f6faff); }
+
+    .queue-card {
+      padding:15px 16px;
+      border-radius:14px;
+      border-color:#e3eaf3;
+      box-shadow:0 2px 10px rgba(23,32,51,.04);
+      transition:.16s ease;
+    }
+    .queue-card:hover { border-color:#cddbed; transform:translateY(-1px); box-shadow:0 9px 22px rgba(23,32,51,.07); }
+
+    .activity-item { padding:11px 0; }
+    .activity-dot { width:9px; height:9px; background:linear-gradient(135deg,#2563eb,#60a5fa); box-shadow:0 0 0 4px #eff6ff; }
+    .activity-sub { margin-top:3px; color:#8c98aa; }
+
+    /* Modal */
+    .modal-overlay { background:rgba(5,15,32,.54); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+    .modal {
+      border-radius:18px;
+      padding:23px;
+      max-width:470px;
+      border:1px solid rgba(255,255,255,.65);
+      box-shadow: var(--shadow-lg);
+      animation: modalIn .18s ease;
+    }
+    @keyframes modalIn { from { opacity:0; transform:scale(.98) translateY(6px); } to { opacity:1; transform:none; } }
+    .modal h3 { font-size:18px; color:#1c2a42; }
+
+    .empty-state {
+      padding:45px 16px;
+      border:1px dashed #d9e2ef;
+      border-radius:14px;
+      background:#fbfcfe;
+      color:#8290a3;
+    }
+    .spinner { width:24px; height:24px; border-width:3px; border-top-color:#2563eb; }
+
+    /* =========================================================
+       APPROVAL FLOW — GLASS TILES + MATERIAL DETAILS
+       ========================================================= */
+    .stage-tile-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+    .stage-tile.has-items { min-height: 0; }
+    .stage-tile::before {
+      content: "";
+      position: absolute; right: -40px; bottom: -50px;
+      width: 190px; height: 190px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(37,99,235,.18), transparent 68%);
+      pointer-events: none;
+    }
+    .stage-tile.c1::before { background: radial-gradient(circle, rgba(15,159,110,.20), transparent 68%); }
+    .stage-tile.c2::before { background: radial-gradient(circle, rgba(234,120,20,.20), transparent 68%); }
+    .stage-tile.c3::before { background: radial-gradient(circle, rgba(14,165,233,.20), transparent 68%); }
+    .stage-tile-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-right: 40px; }
+    .stage-tile-head .stage-tile-icon { margin-bottom: 0; flex-shrink: 0; }
+    .stage-tile-head .stage-tile-title { margin-bottom: 3px; }
+    .stage-tile-count { font-size: 11.5px; font-weight: 700; color: #2458b6; }
+    .stage-tile-count.zero { color: #8290a3; font-weight: 600; }
+
+    .glass-panel {
+      position: relative;
+      padding: 8px 12px 10px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.52);
+      border: 1px solid rgba(255,255,255,.85);
+      box-shadow: 0 8px 24px rgba(31,45,80,.08), inset 0 1px 0 rgba(255,255,255,.9);
+      backdrop-filter: blur(14px) saturate(160%);
+      -webkit-backdrop-filter: blur(14px) saturate(160%);
+    }
+    .glass-panel.glass-empty { padding: 16px 14px; font-size: 12.5px; color: #6b7a90; text-align: center; }
+    .glass-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid rgba(100,116,139,.14); }
+    .glass-item:first-child { border-top: none; }
+    .glass-item-main { min-width: 0; }
+    .glass-item-name { font-size: 13px; font-weight: 700; color: #172033; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .glass-item-sub { font-size: 11.5px; color: #6b7a90; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .glass-item-qty { flex-shrink: 0; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.75); border: 1px solid rgba(255,255,255,.9); font-size: 11.5px; font-weight: 700; color: #2458b6; }
+    .glass-more {
+      width: 100%; margin-top: 6px; padding: 8px 10px;
+      border: 1px dashed rgba(37,99,235,.35); border-radius: 10px;
+      background: rgba(255,255,255,.45); color: #2458b6;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: .16s ease;
+    }
+    .glass-more:hover { background: rgba(255,255,255,.85); border-color: rgba(37,99,235,.6); }
+
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 16px; margin-top: 10px; padding: 11px 13px; border-radius: 11px; background: #f7f9fc; border: 1px solid #e8edf4; }
+    .detail-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .detail-label { font-size: 10.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: #8390a4; }
+    .detail-value { font-size: 12.5px; font-weight: 600; color: #1f2a37; word-break: break-word; }
+    .detail-item.wide { grid-column: 1 / -1; }
+    .detail-qty { color: #2458b6; }
+
+    /* Responsive */
+    @media (max-width: 1180px) {
+      #sidebar { width: 224px; }
+      #content { padding:26px 24px 60px; }
+      .stat-grid { grid-template-columns:repeat(2,1fr); }
+    }
+    @media (max-width: 760px) {
+      #sidebar {
+        position:fixed; left:0; top:0; bottom:0;
+        width:258px;
+        transform:translateX(-105%);
+        box-shadow:25px 0 70px rgba(7,21,47,.28);
+      }
+      body.mobile-nav-open #sidebar { transform:translateX(0); }
+      #mobileOverlay {
+        position:fixed; inset:0; z-index:25;
+        background:rgba(5,15,32,.42);
+        backdrop-filter:blur(2px);
+      }
+      body.mobile-nav-open #mobileOverlay { display:block; }
+      #mobileMenuBtn { display:grid; place-items:center; flex-shrink:0; }
+      #topbar { padding:10px 14px; gap:9px; min-height:62px; }
+      #topbar .app-title { display:none; }
+      #topbar .search { max-width:none; flex:1; }
+      #topbar .user-chip { padding:4px; border:none; box-shadow:none; background:transparent; }
+      #userEmailLabel { display:none; }
+      #content { padding:20px 14px 50px; }
+      .page-title { font-size:22px; }
+      .page-header { align-items:flex-start; }
+      .page-header > .btn { width:100%; }
+      .stat-grid { grid-template-columns:1fr; gap:11px; }
+      .stat-card { min-height:94px; padding:15px; }
+      #page-newEntry .card { padding:18px; }
+      .card { border-radius:15px; padding:16px; }
+      .inline-row { flex-direction:column; }
+      .inline-row .btn { width:100%; }
+      .stage-tile-grid { grid-template-columns:1fr; }
+      .req-header { align-items:flex-start; }
+      .req-progress { margin-top:8px; }
+      .stage-name-col { flex:1 1 100%; }
+      .stage-dates { gap:9px 14px; }
+      .stage-action { width:100%; }
+      .stage-action .btn { width:100%; }
+      .queue-card { align-items:flex-start; }
+      .queue-card > .btn { width:100%; }
+      .modal { width:calc(100% - 24px); max-height:90vh; padding:20px; }
+    }
+
+  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IMS Purchase Approval Tracker</title>
+  <script src="/static/shim.js"></script>
+</head>
+<body>
+
+  <div id="mobileOverlay" onclick="toggleMobileMenu(false)"></div>
+  <div id="app">
+    <div id="sidebar">
+      <div class="brand">
+        <span class="icon">🏢</span>
+        <div><div class="name">Purchase IMS</div><div class="sub">Procurement Control Center</div></div>
+      </div>
+      <nav id="navList">
+        <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">🏠 Dashboard</div>
+        <div class="nav-item" data-page="newEntry" onclick="navigate('newEntry', this)">➕ New Entry</div>
+        <div class="nav-item" data-page="purchaseRequest" onclick="navigate('purchaseRequest', this)">📋 Purchase Request</div>
+        <div class="nav-item" data-page="approvalFlow" onclick="navigate('approvalFlow', this)">✅ Approval Flow</div>
+        <div class="nav-item" data-page="cancelEntry" onclick="navigate('cancelEntry', this)">🚫 Cancel Entry</div>
+        <div class="nav-item" data-page="vendorMaster" onclick="navigate('vendorMaster', this)">👥 Vendor Master</div>
+        <div class="nav-item" data-page="materialMaster" onclick="navigate('materialMaster', this)">📦 Material Master</div>
+        <div class="nav-item" data-page="purchaseOrder" onclick="navigate('purchaseOrder', this)">🛒 Purchase Order</div>
+        <div class="nav-item" data-page="invoices" onclick="navigate('invoices', this)">🧾 Invoices</div>
+        <div class="nav-item" data-page="goodsReceived" onclick="navigate('goodsReceived', this)">🚚 Goods Received</div>
+      </nav>
+      <div class="footer"><b>Oswal Group</b>Building a Better Tomorrow</div>
+    </div>
+
+    <div id="main">
+      <div id="topbar">
+        <button id="mobileMenuBtn" type="button" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
+        <div class="app-title">🛒 Purchase IMS</div>
+        <div class="search"><input type="text" id="globalSearch" placeholder="Search by PO No, Vendor, PR No..." onkeydown="if(event.key==='Enter') runGlobalSearch()"></div>
+        <div id="testAsControl" style="display:none; align-items:center; gap:6px;">
+          <input type="email" id="testAsInput" placeholder="email to test as..." style="min-height:36px; padding:0 10px; border:1px solid #dce4ef; border-radius:8px; font-size:12.5px; width:190px;" onkeydown="if(event.key==='Enter') startTestAs()">
+          <button class="btn small outline" onclick="startTestAs()">Test As</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="user-chip"><div class="avatar" id="userAvatar">--</div><span id="userEmailLabel"></span><a href="/auth/logout" title="Sign out" style="margin-left:10px;font-size:12px;font-weight:600;color:#2458b6;">Sign out</a></div>
+      </div>
+
+      <div id="testAsBanner" style="display:none; padding:10px 28px; background:#fef3c7; color:#92400e; font-size:12.5px; font-weight:600; align-items:center; gap:10px;">
+        <span>🧪 Testing as: <span id="testAsBannerEmail"></span> — any action you take here is real and gets recorded under this email.</span>
+        <button class="btn small outline" onclick="stopTestAs()">Stop Testing</button>
+      </div>
+
+      <div id="content">
+
+        <!-- DASHBOARD -->
+        <div id="page-dashboard" class="page active">
+          <div class="page-header">
+            <div><h1 class="page-title">Purchase Dashboard</h1><p class="page-sub">Track and manage your purchase process efficiently</p></div>
+            <button class="btn" onclick="navigate('newEntry', document.querySelector('[data-page=newEntry]'))">+ New Purchase Request</button>
+          </div>
+          <div class="stat-grid" id="statGrid"><div class="spinner"></div></div>
+          <div style="display:flex; gap:16px; flex-wrap:wrap;">
+            <div class="card" style="flex:2; min-width:340px;">
+              <div style="font-weight:700; margin-bottom:10px;">Recent Requests</div>
+              <div id="dashRecentRequests"><div class="spinner"></div></div>
+            </div>
+            <div class="card" style="flex:1; min-width:260px;">
+              <div style="font-weight:700; margin-bottom:10px;">Recent Activity</div>
+              <div id="dashActivity"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW ENTRY -->
+        <div id="page-newEntry" class="page">
+          <div class="page-header"><div><h1 class="page-title">New Entry</h1><p class="page-sub">Log a new purchase request</p></div></div>
+          <div id="newEntryNoPermMsg" class="empty-state" style="display:none;">You don't have permission to raise a purchase request for any project. Ask an admin to add you to Access Control → New Entry Permission.</div>
+          <div class="card" style="max-width:520px;">
+
+            <div class="field">
+              <label>Project *</label>
+              <div class="chip-group" id="f-project-chips"></div>
+              <input type="hidden" id="f-project">
+            </div>
+
+            <div class="field" id="f-planned-field" style="display:none;">
+              <label>Planned / Non Planned *</label>
+              <div class="chip-group" id="f-planned-chips"></div>
+              <input type="hidden" id="f-planned">
+              <div class="field-hint">"Planned" uses Construction Type/Block/LOT to auto-fill Quantity from "Material Quantity Master" and deducts it on submit. "Non Planned" skips all of that — enter Construction Type/Block/LOT and Quantity freely, with no Material Quantity Master sync.</div>
+            </div>
+
+            <div id="plannedFieldsGroup" style="display:none;">
+              <div class="field">
+                <label>Construction Type *</label>
+                <select id="f-constructiontype" disabled onchange="onConstructionTypeChange()"><option value="">Select project first...</option></select>
+              </div>
+              <div class="field">
+                <label>Block *</label>
+                <select id="f-block" disabled onchange="onBlockChange()"><option value="">Select construction type first...</option></select>
+              </div>
+              <div class="field">
+                <label>LOT *</label>
+                <select id="f-lot" disabled onchange="onLotChange()"><option value="">Select block first...</option></select>
+              </div>
+              <div class="field">
+                <label>Material Name *</label>
+                <select id="f-material" disabled onchange="onMaterialNameChange()"><option value="">Select LOT first...</option></select>
+              </div>
+              <div class="field">
+                <label>Quantity (auto-filled from Remaining) *</label>
+                <input type="text" id="f-quantity" disabled placeholder="Select a material first...">
+                <div class="field-hint" id="remainingHint">Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.</div>
+              </div>
+            </div>
+
+            <div id="manualFieldsGroup" style="display:none;">
+              <div class="field">
+                <label>Material Name *</label>
+                <select id="f-material-manual"><option value="">Select material...</option></select>
+              </div>
+              <div class="field">
+                <label>Quantity *</label>
+                <input type="number" id="f-quantity-manual" min="0" step="any" placeholder="Enter quantity">
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Material Type *</label>
+              <div class="chip-group" id="f-materialtype-chips"></div>
+              <input type="hidden" id="f-materialtype">
+            </div>
+
+            <div class="field">
+              <label>Estimated Delivery Date</label>
+              <input type="date" id="f-edd">
+            </div>
+            <div class="field">
+              <label>Overall Status</label>
+              <span class="pill pending">Not Done</span>
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">Automatically flips to Done once every applicable stage is Approved/Done.</div>
+            </div>
+            <div class="field">
+              <label>Remarks</label>
+              <textarea id="f-remarks" placeholder="Optional remarks"></textarea>
+            </div>
+            <div class="field">
+              <label>Request Entry Status *</label>
+              <div class="chip-group" id="f-entrystatus-chips"></div>
+              <input type="hidden" id="f-entrystatus">
+              <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">"Not Done" saves this as a draft — the approval flow won't start until you (or anyone) click "Start Approval Flow" on it later. "Done" starts the flow immediately.</div>
+            </div>
+            <button class="btn" id="submitBtn" onclick="submitRequest()">Submit Request</button>
+            <div class="msg" id="formMsg"></div>
+          </div>
+        </div>
+
+        <!-- PURCHASE REQUEST -->
+        <div id="page-purchaseRequest" class="page">
+          <div class="page-header"><div><h1 class="page-title">Purchase Request</h1><p class="page-sub">All requests and their full approval progress</p></div></div>
+          <div id="reqList"><div class="spinner"></div></div>
+        </div>
+
+        <!-- APPROVAL FLOW -->
+        <div id="page-approvalFlow" class="page">
+          <div class="page-header"><div><h1 class="page-title">Approval Flow</h1><p class="page-sub">Stages currently waiting on you</p></div></div>
+          <div id="queueList"><div class="spinner"></div></div>
+        </div>
+
+        <!-- APPROVAL FLOW: STAGE DETAIL (full list for one stage) -->
+        <div id="page-stageDetail" class="page">
+          <div class="page-header">
+            <div><h1 class="page-title" id="stageDetailTitle">Stage</h1><p class="page-sub" id="stageDetailSub"></p></div>
+            <button class="btn outline" onclick="navigate('approvalFlow', document.querySelector('[data-page=approvalFlow]'))">← Back to Approval Flow</button>
+          </div>
+          <div id="stageDetailList"></div>
+        </div>
+
+        <!-- CANCEL ENTRY -->
+        <div id="page-cancelEntry" class="page">
+          <div class="page-header"><div><h1 class="page-title">Cancel Entry</h1><p class="page-sub">Cancel a request to automatically restore its quantity back to "Material Quantity Master"</p></div></div>
+          <div id="cancelList"><div class="spinner"></div></div>
+        </div>
+
+        <!-- VENDOR MASTER -->
+        <div id="page-vendorMaster" class="page">
+          <div class="page-header"><div><h1 class="page-title">Vendor Master</h1><p class="page-sub">Existing vendors used across purchase orders</p></div></div>
+          <div class="card" style="max-width:480px;">
+            <input type="text" id="vendorSearchInput" placeholder="Search vendors..." style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" oninput="filterVendorList()">
+          </div>
+          <div class="card"><div id="vendorList"><div class="spinner"></div></div></div>
+        </div>
+
+        <!-- MATERIAL MASTER -->
+        <div id="page-materialMaster" class="page">
+          <div class="page-header"><div><h1 class="page-title">Material Master</h1><p class="page-sub">Existing materials used across purchase requests</p></div></div>
+          <div class="card" style="max-width:480px;">
+            <input type="text" id="materialSearchInput" placeholder="Search materials..." style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" oninput="filterMaterialList()">
+          </div>
+          <div class="card"><div id="materialList"><div class="spinner"></div></div></div>
+        </div>
+
+        <!-- PURCHASE ORDER -->
+        <div id="page-purchaseOrder" class="page">
+          <div class="page-header"><div><h1 class="page-title">Purchase Order</h1><p class="page-sub">Look up a request by its PO No</p></div></div>
+          <div class="card" style="max-width:480px;">
+            <div class="inline-row">
+              <input type="text" id="poSearchInput" placeholder="Enter PO No..." style="flex:1; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" onkeydown="if(event.key==='Enter') searchByPO()">
+              <button class="btn" onclick="searchByPO()">Search</button>
+            </div>
+          </div>
+          <div id="poResults"></div>
+        </div>
+
+        <!-- INVOICES -->
+        <div id="page-invoices" class="page">
+          <div class="page-header"><div><h1 class="page-title">Invoices</h1><p class="page-sub">Look up a request by its Indent No</p></div></div>
+          <div class="card" style="max-width:480px;">
+            <div class="inline-row">
+              <input type="text" id="indentSearchInput" placeholder="Enter Indent No..." style="flex:1; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" onkeydown="if(event.key==='Enter') searchByIndent()">
+              <button class="btn" onclick="searchByIndent()">Search</button>
+            </div>
+          </div>
+          <div id="indentResults"></div>
+        </div>
+
+        <!-- GOODS RECEIVED -->
+        <div id="page-goodsReceived" class="page">
+          <div class="page-header"><div><h1 class="page-title">Goods Received</h1><p class="page-sub">Look up a request by its Challan No. / Bill No.</p></div></div>
+          <div class="card" style="max-width:480px;">
+            <div class="inline-row">
+              <input type="text" id="challanSearchInput" placeholder="Enter Challan No. / Bill No..." style="flex:1; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" onkeydown="if(event.key==='Enter') searchByChallan()">
+              <button class="btn" onclick="searchByChallan()">Search</button>
+            </div>
+          </div>
+          <div id="challanResults"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Action modal (mark a stage done/approved) -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <h3 id="modalTitle">Mark Stage Done</h3>
+      <div id="modalExtraFields"></div>
+      <div class="msg" id="modalMsg"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn" id="modalConfirmBtn" onclick="confirmAction()">Confirm</button>
+        <button class="btn outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cancel Entry modal (Cancel Reason + Cancel Date, entered by the cancelling user) -->
+  <div class="modal-overlay" id="cancelModalOverlay">
+    <div class="modal">
+      <h3 id="cancelModalTitle">Cancel Request</h3>
+      <div class="field">
+        <label>Cancel Reason *</label>
+        <textarea id="cancelReasonInput" placeholder="Why is this request being cancelled?"></textarea>
+      </div>
+      <div class="field">
+        <label>Cancel Date *</label>
+        <input type="date" id="cancelDateInput">
+        <div class="field-hint">Defaults to today — change it if you're recording a cancellation that actually happened earlier.</div>
+      </div>
+      <div class="msg" id="cancelModalMsg"></div>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn danger" id="cancelModalConfirmBtn" onclick="confirmCancel()">Confirm Cancellation</button>
+        <button class="btn outline" onclick="closeCancelModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var stageConfig = [];
+    var allRequests = [];
+    var vendorsCache = [];
+    var materialsCache = [];
+    var qtyMasterCache = []; // Material Quantity Master rows, scoped to the currently selected project
+    var modalCtx = null;
+    var loadedPages = {};
+    var currentUserEmail = '';
+    var isAdminUser = false;
+    var canUseTestAs = false; // true only when the REAL logged-in user is an admin
+    var testAsEmail = null;   // active "Test As" preview email, or null
+    var requestableProjects = []; // projects the current user may raise New Entry requests for
+    var myStageKeys = null;   // stage keys assigned to the current (or Test-As'd) user; null = not loaded yet
+
+    // ---------- TEST AS (admin-only; performs REAL actions recorded as the tested email) ----------
+    function startTestAs() {
+      if (!canUseTestAs) return; // server ignores it anyway, but don't even try client-side
+      var val = document.getElementById('testAsInput').value.trim();
+      if (!val) return;
+      google.script.run
+        .withSuccessHandler(function(info) {
+          if (!info || !info.testing) {
+            alert('Could not start Test As — you may no longer be recognized as an admin.');
+            return;
+          }
+          testAsEmail = val;
+          document.getElementById('testAsBannerEmail').textContent = info.email;
+          document.getElementById('testAsBanner').style.display = 'flex';
+          currentUserEmail = info.email.toLowerCase();
+          isAdminUser = !!info.isAdmin;
+          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects();
+        })
+        .withFailureHandler(function(err) { alert(err.message || 'Failed to start Test As.'); })
+        .imsApprovalGetCurrentUserInfo(val);
+    }
+
+    function stopTestAs() {
+      testAsEmail = null;
+      document.getElementById('testAsInput').value = '';
+      document.getElementById('testAsBanner').style.display = 'none';
+      google.script.run.withSuccessHandler(function(info) {
+        var email = (info && info.email) || '';
+        document.getElementById('userEmailLabel').textContent = email || '';
+        document.getElementById('userAvatar').textContent = (email || '??').substring(0,2).toUpperCase();
+        currentUserEmail = email.toLowerCase();
+        isAdminUser = !!(info && info.isAdmin);
+        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects();
+      }).imsApprovalGetCurrentUserInfo();
+    }
+
+    function toggleMobileMenu(forceState) {
+      var open = typeof forceState === 'boolean' ? forceState : !document.body.classList.contains('mobile-nav-open');
+      document.body.classList.toggle('mobile-nav-open', open);
+    }
+
+    function navigate(pageId, el) {
+      if (pageId === 'newEntry' && !requestableProjects.length) {
+        pageId = 'dashboard';
+        el = document.querySelector('[data-page=dashboard]');
+      }
+      document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+      document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+      document.getElementById('page-' + pageId).classList.add('active');
+      if (el) el.classList.add('active');
+      if (pageId !== 'stageDetail') currentStageDetailKey = null;
+      toggleMobileMenu(false);
+
+      if (pageId === 'dashboard') loadDashboard();
+      if (pageId === 'purchaseRequest') loadRequests();
+      if (pageId === 'approvalFlow') loadQueue();
+      if (pageId === 'cancelEntry') loadCancelList();
+      if (pageId === 'vendorMaster') loadVendors();
+      if (pageId === 'materialMaster') loadMaterials();
+    }
+
+    function init() {
+      google.script.run.withSuccessHandler(function(cfg) {
+        stageConfig = cfg;
+      }).imsApprovalGetStageConfigForClient();
+
+      loadRequestableProjects();
+
+      google.script.run.withSuccessHandler(function(types) {
+        renderChips('f-materialtype-chips', 'f-materialtype', types);
+      }).imsApprovalGetMaterialTypesForClient();
+
+      google.script.run.withSuccessHandler(function(materials) {
+        materialsCache = materials;
+      }).imsApprovalGetMaterials();
+
+      google.script.run.withSuccessHandler(function(vendors) {
+        vendorsCache = vendors;
+      }).imsApprovalGetVendors();
+
+      google.script.run.withSuccessHandler(function(info) {
+        var email = (info && info.email) || '';
+        document.getElementById('userEmailLabel').textContent = email || '';
+        document.getElementById('userAvatar').textContent = (email || '??').substring(0,2).toUpperCase();
+        currentUserEmail = email.toLowerCase();
+        isAdminUser = !!(info && info.isAdmin);
+        canUseTestAs = !!(info && info.realIsAdmin);
+        if (canUseTestAs) {
+          document.getElementById('testAsControl').style.display = 'flex';
+        }
+      }).imsApprovalGetCurrentUserInfo();
+
+      renderChips('f-entrystatus-chips', 'f-entrystatus', ['Not Done', 'Done']);
+      var firstEntryChip = document.querySelector('#f-entrystatus-chips .chip');
+      if (firstEntryChip) selectChip('f-entrystatus-chips', 'f-entrystatus', firstEntryChip);
+
+      loadDashboard();
+    }
+
+    // ---------- DASHBOARD ----------
+    function loadDashboard() {
+      google.script.run
+        .withSuccessHandler(function(reqs) {
+          allRequests = reqs;
+          renderDashboard(activeRequests(reqs));
+        })
+        .withFailureHandler(function(err) {
+          document.getElementById('statGrid').innerHTML = '<div class="empty-state">Failed to load: ' + err.message + '</div>';
+        })
+        .imsApprovalGetRequests(testAsEmail || '');
+    }
+
+    /** Requests that are not cancelled — used everywhere except the Cancel Entry page. */
+    function activeRequests(reqs) {
+      return (reqs || []).filter(function(r) { return !r.cancelled; });
+    }
+
+    function renderDashboard(reqs) {
+      var totalRequests = reqs.length;
+      var approvedPO = reqs.filter(function(r){ return r.stages.poMaking && r.stages.poMaking.status === 'Done'; }).length;
+      var goodsReceived = reqs.filter(function(r){ return r.stages.grn && r.stages.grn.status === 'Done'; }).length;
+      var totalValue = reqs.reduce(function(sum, r) {
+        var amt = r.stages.poEntry ? Number(r.stages.poEntry.poAmount) : 0;
+        return sum + (isNaN(amt) ? 0 : amt);
+      }, 0);
+
+      document.getElementById('statGrid').innerHTML =
+        statCard('📋', '#e8f0fe', 'Total Purchase Requests', totalRequests) +
+        statCard('🛒', '#f1e9fb', 'Approved PO', approvedPO) +
+        statCard('🚚', '#e3f6ea', 'Goods Received', goodsReceived) +
+        statCard('₹', '#fdeee0', 'Total PO Value', '₹' + totalValue.toLocaleString('en-IN'));
+
+      var recent = reqs.slice(0, 6);
+      document.getElementById('dashRecentRequests').innerHTML = recent.length ? recent.map(function(r) {
+        return '<div class="master-list-item"><span><span class="card-id-badge">#' + r.srNo + '</span><b>' + escapeHtml(r.materialName) + '</b> <span style="color:var(--text-muted);">(' + escapeHtml(r.project) + ')</span></span>' +
+          '<span class="pill ' + (r.overallStatus === 'Done' ? 'done' : 'pending') + '">' + r.overallStatus + '</span></div>';
+      }).join('') : '<div class="empty-state">No requests yet.</div>';
+
+      var activity = [];
+      reqs.forEach(function(r) {
+        stageConfig.forEach(function(s) {
+          var sd = r.stages[s.key];
+          if (sd && sd.status === s.statusValues.done && sd.actual) {
+            activity.push({ text: s.name + ' completed for #' + r.srNo + ' (' + escapeHtml(r.project) + ')', date: sd.actual });
+          }
+        });
+      });
+      activity.sort(function(a,b){ return new Date(b.date) - new Date(a.date); });
+      document.getElementById('dashActivity').innerHTML = activity.length ? activity.slice(0, 8).map(function(a) {
+        return '<div class="activity-item"><div class="activity-dot"></div><div><div>' + a.text + '</div><div class="activity-sub">' + a.date + '</div></div></div>';
+      }).join('') : '<div class="empty-state">No activity yet.</div>';
+    }
+
+    function statCard(icon, bg, label, value) {
+      return '<div class="stat-card"><div class="stat-icon" style="background:' + bg + ';">' + icon + '</div>' +
+        '<div><div class="stat-label">' + label + '</div><div class="stat-value">' + value + '</div></div></div>';
+    }
+
+    function renderChips(containerId, hiddenInputId, values) {
+      var container = document.getElementById(containerId);
+      var hidden = document.getElementById(hiddenInputId);
+      container.innerHTML = values.map(function(v) {
+        return '<div class="chip" data-value="' + escapeHtml(v) + '" onclick="selectChip(\'' + containerId + '\',\'' + hiddenInputId + '\',this)">' + escapeHtml(v) + '</div>';
+      }).join('');
+      hidden.value = '';
+    }
+
+    function selectChip(containerId, hiddenInputId, el) {
+      document.querySelectorAll('#' + containerId + ' .chip').forEach(function(c){ c.classList.remove('selected'); });
+      el.classList.add('selected');
+      document.getElementById(hiddenInputId).value = el.getAttribute('data-value');
+    }
+
+    // ---------- NEW ENTRY: Project -> Construction Type -> Block -> LOT -> Material Name cascade ----------
+
+    function renderProjectChips(values) {
+      var container = document.getElementById('f-project-chips');
+      if (!values.length) {
+        container.innerHTML = '';
+        document.getElementById('f-project').value = '';
+        return;
+      }
+      container.innerHTML = values.map(function(v) {
+        return '<div class="chip" data-value="' + escapeHtml(v) + '" onclick="selectProjectChip(this)">' + escapeHtml(v) + '</div>';
+      }).join('');
+      document.getElementById('f-project').value = '';
+    }
+
+    /** Fetches the (permission-filtered) list of projects the current — or Test-As'd — user
+     * may raise New Entry requests for, renders the Project chips from it, and shows/hides a
+     * "no permission" message + the New Entry sidebar link accordingly. */
+    function loadRequestableProjects() {
+      google.script.run
+        .withSuccessHandler(function(projects) {
+          requestableProjects = projects || [];
+          renderProjectChips(requestableProjects);
+          var noPermMsg = document.getElementById('newEntryNoPermMsg');
+          var card = document.querySelector('#page-newEntry .card');
+          var navItem = document.querySelector('.nav-item[data-page="newEntry"]');
+          if (requestableProjects.length) {
+            noPermMsg.style.display = 'none';
+            card.style.display = 'block';
+            navItem.style.display = 'flex';
+          } else {
+            noPermMsg.style.display = 'block';
+            card.style.display = 'none';
+            navItem.style.display = 'none';
+          }
+        })
+        .imsApprovalGetRequestableProjects(testAsEmail || '');
+    }
+
+    var entryMode = null; // 'planned' | 'manual' — which field group is active in New Entry
+
+    function selectProjectChip(el) {
+      selectChip('f-project-chips', 'f-project', el);
+      var project = document.getElementById('f-project').value;
+      resetAllEntryFields();
+      if (!project) return;
+
+      document.getElementById('f-planned-field').style.display = 'none';
+      google.script.run
+        .withSuccessHandler(function(rows) {
+          qtyMasterCache = rows || [];
+          if (qtyMasterCache.length) {
+            // Master data exists for this project — offer Planned / Non Planned, default Planned.
+            document.getElementById('f-planned-field').style.display = 'block';
+            var plannedContainer = document.getElementById('f-planned-chips');
+            plannedContainer.innerHTML = ['Planned', 'Non Planned'].map(function(v) {
+              return '<div class="chip" data-value="' + v + '" onclick="selectPlannedChip(this)">' + v + '</div>';
+            }).join('');
+            var firstPlannedChip = plannedContainer.querySelector('.chip');
+            if (firstPlannedChip) selectPlannedChip(firstPlannedChip);
+          } else {
+            // No master data for this project (yet) — no toggle, straight to manual entry.
+            switchEntryMode('manual');
+          }
+        })
+        .withFailureHandler(function(err) {
+          qtyMasterCache = [];
+          switchEntryMode('manual');
+        })
+        .imsApprovalGetQtyMasterForProject(project);
+    }
+
+    function selectPlannedChip(el) {
+      selectChip('f-planned-chips', 'f-planned', el);
+      switchEntryMode(el.getAttribute('data-value') === 'Planned' ? 'planned' : 'manual');
+    }
+
+    function switchEntryMode(mode) {
+      entryMode = mode;
+      document.getElementById('plannedFieldsGroup').style.display = mode === 'planned' ? 'block' : 'none';
+      document.getElementById('manualFieldsGroup').style.display = mode === 'manual' ? 'block' : 'none';
+      if (mode === 'planned') {
+        populateConstructionTypeOptions();
+      } else {
+        resetManualFields();
+      }
+    }
+
+    function resetAllEntryFields() {
+      qtyMasterCache = [];
+      entryMode = null;
+      document.getElementById('f-planned-field').style.display = 'none';
+      document.getElementById('f-planned').value = '';
+      document.getElementById('plannedFieldsGroup').style.display = 'none';
+      document.getElementById('manualFieldsGroup').style.display = 'none';
+      resetCascadingFields();
+      resetManualFields();
+    }
+
+    function resetManualFields() {
+      document.getElementById('f-quantity-manual').value = '';
+      var sel = document.getElementById('f-material-manual');
+      sel.innerHTML = '<option value="">Select material...</option>' + materialsCache.map(function(m) {
+        return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>';
+      }).join('');
+    }
+
+    function resetCascadingFields() {
+      setSelectOptions('f-constructiontype', [], 'Select project first...', true);
+      setSelectOptions('f-block', [], 'Select construction type first...', true);
+      setSelectOptions('f-lot', [], 'Select block first...', true);
+      setSelectOptions('f-material', [], 'Select LOT first...', true);
+      clearQuantity();
+    }
+
+    function setSelectOptions(id, values, placeholder, disabled) {
+      var sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">' + escapeHtml(placeholder) + '</option>' + values.map(function(v) {
+        return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+      }).join('');
+      sel.disabled = !!disabled;
+    }
+
+    function distinctValues(arr, key) {
+      var seen = {}; var out = [];
+      arr.forEach(function(r) { var v = r[key]; if (v && !seen[v]) { seen[v] = true; out.push(v); } });
+      return out.sort();
+    }
+
+    function populateConstructionTypeOptions() {
+      var types = distinctValues(qtyMasterCache, 'constructionType');
+      setSelectOptions('f-constructiontype', types, types.length ? 'Select construction type...' : 'No Material Quantity Master data for this project', !types.length);
+      setSelectOptions('f-block', [], 'Select construction type first...', true);
+      setSelectOptions('f-lot', [], 'Select block first...', true);
+      setSelectOptions('f-material', [], 'Select LOT first...', true);
+      clearQuantity();
+    }
+
+    function onConstructionTypeChange() {
+      var ct = document.getElementById('f-constructiontype').value;
+      setSelectOptions('f-block', [], 'Select block...', true);
+      setSelectOptions('f-lot', [], 'Select block first...', true);
+      setSelectOptions('f-material', [], 'Select LOT first...', true);
+      clearQuantity();
+      if (!ct) return;
+      var blocks = distinctValues(qtyMasterCache.filter(function(r){ return r.constructionType === ct; }), 'block');
+      setSelectOptions('f-block', blocks, blocks.length ? 'Select block...' : 'No blocks found', !blocks.length);
+    }
+
+    function onBlockChange() {
+      var ct = document.getElementById('f-constructiontype').value;
+      var block = document.getElementById('f-block').value;
+      setSelectOptions('f-lot', [], 'Select LOT...', true);
+      setSelectOptions('f-material', [], 'Select LOT first...', true);
+      clearQuantity();
+      if (!block) return;
+      var lots = distinctValues(qtyMasterCache.filter(function(r){ return r.constructionType === ct && r.block === block; }), 'lot');
+      setSelectOptions('f-lot', lots, lots.length ? 'Select LOT...' : 'No LOTs found', !lots.length);
+    }
+
+    function onLotChange() {
+      var ct = document.getElementById('f-constructiontype').value;
+      var block = document.getElementById('f-block').value;
+      var lot = document.getElementById('f-lot').value;
+      clearQuantity();
+      var sel = document.getElementById('f-material');
+      if (!lot) { sel.innerHTML = '<option value="">Select LOT first...</option>'; sel.disabled = true; return; }
+      var matches = qtyMasterCache.filter(function(r){ return r.constructionType === ct && r.block === block && r.lot === lot; });
+      if (matches.length) {
+        sel.innerHTML = '<option value="">Select material...</option>' + matches.map(function(r) {
+          return '<option value="' + escapeHtml(r.materialName) + '" data-remaining="' + r.remaining + '">' +
+            escapeHtml(r.materialName) + ' (Remaining: ' + r.remaining + ')</option>';
+        }).join('');
+        sel.disabled = false;
+      } else {
+        sel.innerHTML = '<option value="">No materials found for this combination</option>';
+        sel.disabled = true;
+      }
+    }
+
+    function onMaterialNameChange() {
+      var sel = document.getElementById('f-material');
+      var opt = sel.options[sel.selectedIndex];
+      var remaining = opt ? opt.getAttribute('data-remaining') : null;
+      var qtyInput = document.getElementById('f-quantity');
+      var hint = document.getElementById('remainingHint');
+      if (remaining === null || remaining === undefined || !opt.value) {
+        qtyInput.value = '';
+        hint.textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
+        return;
+      }
+      qtyInput.value = remaining;
+      var remNum = Number(remaining);
+      if (isNaN(remNum) || remNum <= 0) {
+        hint.innerHTML = '<span style="color:var(--danger); font-weight:600;">Remaining is ' + remaining + ' — nothing left to request for this material.</span>';
+      } else {
+        hint.textContent = 'Remaining in master: ' + remaining + ' — the full amount will be requested and Remaining will be set to 0 on submit.';
+      }
+    }
+
+    function clearQuantity() {
+      document.getElementById('f-quantity').value = '';
+      document.getElementById('remainingHint').textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
+    }
+
+    // ---------- NEW ENTRY: submit ----------
+
+    function submitRequest() {
+      var project = document.getElementById('f-project').value;
+      var isPlanned = entryMode === 'planned';
+      var constructionType, block, lot, material, quantity;
+
+      if (isPlanned) {
+        constructionType = document.getElementById('f-constructiontype').value.trim();
+        block = document.getElementById('f-block').value.trim();
+        lot = document.getElementById('f-lot').value.trim();
+        material = document.getElementById('f-material').value;
+        quantity = document.getElementById('f-quantity').value;
+      } else {
+        constructionType = '';
+        block = '';
+        lot = '';
+        material = document.getElementById('f-material-manual').value;
+        quantity = document.getElementById('f-quantity-manual').value;
+      }
+
+      var materialType = document.getElementById('f-materialtype').value;
+      var edd = document.getElementById('f-edd').value;
+      var remarks = document.getElementById('f-remarks').value.trim();
+      var entryStatus = document.getElementById('f-entrystatus').value;
+      var msg = document.getElementById('formMsg');
+      var btn = document.getElementById('submitBtn');
+      msg.className = 'msg'; msg.textContent = '';
+
+      if (!project) {
+        msg.className = 'msg error'; msg.textContent = 'Project is required.'; return;
+      }
+      if (isPlanned && (!constructionType || !block || !lot)) {
+        msg.className = 'msg error';
+        msg.textContent = 'Construction Type, Block, and LOT are required for a Planned entry.';
+        return;
+      }
+      if (!material || !materialType || !entryStatus) {
+        msg.className = 'msg error';
+        msg.textContent = 'Material Name, Material Type, and Request Entry Status are required.';
+        return;
+      }
+      if (!quantity || Number(quantity) <= 0) {
+        msg.className = 'msg error'; msg.textContent = 'Quantity must be greater than 0.'; return;
+      }
+
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Submit Request';
+          if (res.success) {
+            msg.className = 'msg success';
+            var extra = res.qtySynced ? (' Remaining updated to ' + res.remainingAfter + '.') : '';
+            msg.textContent = 'Request #' + res.srNo + ' created' + (entryStatus === 'Done' ? ' — approval flow started.' : ' as a draft.') + extra;
+
+            document.querySelectorAll('#f-project-chips .chip, #f-materialtype-chips .chip, #f-entrystatus-chips .chip').forEach(function(c){ c.classList.remove('selected'); });
+            document.getElementById('f-project').value = '';
+            document.getElementById('f-materialtype').value = '';
+            resetAllEntryFields();
+            document.getElementById('f-edd').value = '';
+            document.getElementById('f-remarks').value = '';
+            document.getElementById('f-entrystatus').value = '';
+            var firstEntryChip = document.querySelector('#f-entrystatus-chips .chip');
+            if (firstEntryChip) selectChip('f-entrystatus-chips', 'f-entrystatus', firstEntryChip);
+            loadDashboard();
+          } else {
+            msg.className = 'msg error'; msg.textContent = res.error || 'Failed.';
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Submit Request';
+          msg.className = 'msg error'; msg.textContent = err.message || 'Failed.';
+        })
+        .imsApprovalSubmitRequest({
+          project: project, planned: isPlanned ? 'Planned' : 'Non Planned',
+          constructionType: constructionType, block: block, lot: lot,
+          materialName: material, materialType: materialType, quantity: quantity,
+          estimatedDeliveryDate: edd, remarks: remarks, entryStatus: entryStatus
+        });
+    }
+
+    // ---------- PURCHASE REQUEST (full restricted-detail list) ----------
+    function loadRequests() {
+      var list = document.getElementById('reqList');
+      list.innerHTML = '<div class="spinner"></div>';
+      google.script.run
+        .withSuccessHandler(function(reqs) { allRequests = reqs; renderRequests(); })
+        .withFailureHandler(function(err) { list.innerHTML = '<div class="empty-state">Failed to load: ' + err.message + '</div>'; })
+        .imsApprovalGetRequests(testAsEmail || '');
+    }
+
+    function stageCfgByKey(key) {
+      for (var i = 0; i < stageConfig.length; i++) if (stageConfig[i].key === key) return stageConfig[i];
+      return null;
+    }
+
+    function isStageApplicable(req, key) {
+      if (key !== 'advancePayment') return true;
+      var advReq = req.stages['poMaking'] && req.stages['poMaking'].advancePaymentRequired;
+      return advReq === 'Yes';
+    }
+
+    function renderRequests() {
+      var list = document.getElementById('reqList');
+      var reqs = activeRequests(allRequests);
+      if (reqs.length === 0) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; return; }
+      list.innerHTML = reqs.map(renderRequestCard).join('');
+    }
+
+    function requestMetaLine(req) {
+      var bits = [];
+      if (req.planned) bits.push(req.planned);
+      if (req.constructionType) bits.push(escapeHtml(req.constructionType));
+      if (req.block) bits.push('Block ' + escapeHtml(req.block));
+      if (req.lot) bits.push('LOT ' + escapeHtml(req.lot));
+      if (req.quantity !== '' && req.quantity !== undefined && req.quantity !== null) bits.push('Qty ' + req.quantity);
+      return bits.join(' · ');
+    }
+
+    function renderRequestCard(req) {
+      var metaLine = requestMetaLine(req);
+      if (req.entryStatus !== 'Done') {
+        var canStart = testAsEmail ? ((req.userEmail || '').toLowerCase() === testAsEmail.toLowerCase()) : (currentUserEmail && (req.userEmail || '').toLowerCase() === currentUserEmail);
+        return '<div class="req-card"><div class="req-header" style="cursor:default;">' +
+          '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> <span class="pill pending">Draft — Not Started</span></div>' +
+          '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
+          (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
+          '<div class="req-sub">By ' + escapeHtml(req.userEmail) + ' · ' + req.entryTimestamp +
+            (req.estimatedDeliveryDate ? ' · EDD: ' + req.estimatedDeliveryDate : '') +
+            (req.remarks ? ' · ' + escapeHtml(req.remarks) : '') + '</div>' +
+          '<div class="draft-note">Approval flow has not started. Planned dates will be set the moment it starts.</div></div>' +
+          (canStart ? '<button class="btn small" onclick="startFlow(' + req.srNo + ')">Start Approval Flow</button>' : '') +
+        '</div></div>';
+      }
+
+      var applicableStages = stageConfig.filter(function(s){ return isStageApplicable(req, s.key); });
+      var doneCount = applicableStages.filter(function(s){ return req.stages[s.key].status === s.statusValues.done; }).length;
+
+      var stageRows = stageConfig.map(function(s) {
+        var applicable = isStageApplicable(req, s.key);
+        var sd = req.stages[s.key];
+        if (!applicable) {
+          return '<div class="stage-row"><div class="stage-name-col"><div class="stage-name">' + s.name + '</div></div>' +
+            '<div class="stage-dates"><span class="pill skipped">Skipped</span></div></div>';
+        }
+        if (!sd.isMyStage) {
+          var doneLabelR = s.statusValues.done;
+          var pillClassR = sd.status === doneLabelR ? 'done' : 'pending';
+          return '<div class="restricted-row"><div class="stage-name">' + s.name + '</div>' +
+            '<div style="display:flex; align-items:center; gap:10px;"><span class="restricted-note">Restricted</span>' +
+            '<span class="pill ' + pillClassR + '">' + sd.status + '</span></div></div>';
+        }
+        var doneLabel = s.statusValues.done;
+        var pillClass = sd.status === doneLabel ? 'done' : 'pending';
+        var delayHtml = '';
+        if (sd.delay !== '' && sd.delay !== undefined && sd.delay !== null) {
+          var d = Number(sd.delay);
+          delayHtml = '<span>Delay: <b class="' + (d < 0 ? 'delay-pos' : 'delay-neg') + '">' + d + ' d</b></span>';
+        }
+        var actionHtml = sd.canCurrentUserAct
+          ? '<button class="btn small" onclick="openModal(' + req.srNo + ', \'' + s.key + '\')">Mark ' + doneLabel + '</button>' : '';
+        var approvedByHtml = sd.status === doneLabel && sd.approvedBy
+          ? '<span>' + doneLabel + ' by: <b>' + escapeHtml(sd.approvedBy) + '</b></span>' : '';
+        var approverLabel = sd.approver || (s.computedApprover ? 'Determined after PO Entry Stage' : 'No approver set for this project');
+        var extraFieldsHtml = (s.extra || []).map(function(ex) {
+          var val = sd[ex.key];
+          return val ? '<span>' + escapeHtml(ex.label) + ': <b>' + escapeHtml(val.toString()) + '</b></span>' : '';
+        }).join('');
+        return '<div class="stage-row">' +
+          '<div class="stage-name-col"><div class="stage-name">' + s.name + '</div>' +
+            '<div class="stage-approver">' + escapeHtml(approverLabel) + '</div></div>' +
+          '<div class="stage-dates">' +
+            '<span>Planned: <b>' + (sd.planned || '—') + '</b></span>' +
+            '<span>Actual: <b>' + (sd.actual || '—') + '</b></span>' +
+            delayHtml + approvedByHtml + extraFieldsHtml +
+            '<span class="pill ' + pillClass + '">' + sd.status + '</span>' +
+          '</div>' +
+          '<div class="stage-action">' + actionHtml + '</div>' +
+        '</div>';
+      }).join('');
+
+      return '<div class="req-card">' +
+        '<div class="req-header" onclick="toggleReq(' + req.srNo + ')">' +
+          '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> <span class="pill ' + (req.overallStatus === 'Done' ? 'done' : 'pending') + '">' + req.overallStatus + '</span></div>' +
+          '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
+          (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
+          '<div class="req-sub">By ' + escapeHtml(req.userEmail) + ' · ' + req.entryTimestamp +
+            (req.estimatedDeliveryDate ? ' · EDD: ' + req.estimatedDeliveryDate : '') +
+            (req.remarks ? ' · ' + escapeHtml(req.remarks) : '') + '</div></div>' +
+          '<div class="req-progress">' + doneCount + ' / ' + applicableStages.length + ' stages done</div>' +
+        '</div>' +
+        '<div class="req-body" id="body-' + req.srNo + '">' + stageRows + '</div>' +
+      '</div>';
+    }
+
+    function toggleReq(srNo) {
+      var body = document.getElementById('body-' + srNo);
+      if (body) body.classList.toggle('open');
+    }
+
+    function startFlow(srNo) {
+      if (!confirm('Start the approval flow for request #' + srNo + '? Planned dates will be set from right now.')) return;
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.success) {
+            loadDashboard(); loadRequests(); loadQueue();
+          } else {
+            alert(res.error || 'Failed to start the flow.');
+          }
+        })
+        .withFailureHandler(function(err) { alert(err.message || 'Failed to start the flow.'); })
+        .imsApprovalStartFlow(srNo);
+    }
+
+    // ---------- APPROVAL FLOW ----------
+    /** Loads the queue AND the list of stage keys assigned to this user in parallel, then renders
+     * once both have arrived — so only the user's own stage tiles are ever shown. */
+    function loadQueue() {
+      var list = document.getElementById('queueList');
+      list.innerHTML = '<div class="spinner"></div>';
+      var pending = 2;
+      var queueItems = null;
+      var failed = false;
+
+      function done() {
+        pending--;
+        if (pending === 0 && !failed) {
+          renderQueue(queueItems);
+        }
+      }
+      function fail(err) {
+        if (failed) return;
+        failed = true;
+        list.innerHTML = '<div class="empty-state">Failed to load: ' + ((err && err.message) || 'Unknown error') + '</div>';
+      }
+
+      google.script.run
+        .withSuccessHandler(function(items) { queueItems = items || []; done(); })
+        .withFailureHandler(fail)
+        .imsApprovalGetMyQueue(testAsEmail || '');
+
+      google.script.run
+        .withSuccessHandler(function(keys) { myStageKeys = keys || []; done(); })
+        .withFailureHandler(fail)
+        .imsApprovalGetMyStageKeys(testAsEmail || '');
+    }
+
+    var EXPAND_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 3H21V10" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 21H3V14" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 3L13 11" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 21L11 13" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var STAGE_TILE_ICONS = ['✅','📄','🧮','🧾','💳','🛒','⚖️','📝','💰','🚚','📦','🚛'];
+    var TILE_PREVIEW_LIMIT = 3; // how many materials a stage tile previews before "View all"
+    var queueByStage = {};
+    var currentStageDetailKey = null;
+    var selectedQueueItems = {};
+
+    function queueItemKey(stageKey, srNo) {
+      return stageKey + '|' + srNo;
+    }
+
+    function canBulkApproveStage(stageDef) {
+      return !!stageDef && !(stageDef.extra && stageDef.extra.length);
+    }
+
+    function getBulkSelectableItems(stageKey) {
+      var s = stageCfgByKey(stageKey);
+      if (!canBulkApproveStage(s)) return [];
+      return (queueByStage[stageKey] || []).filter(function(item) { return !!item.canAct; });
+    }
+
+    function selectedCountForStage(stageKey) {
+      return getBulkSelectableItems(stageKey).filter(function(item) {
+        return !!selectedQueueItems[queueItemKey(item.stageKey, item.srNo)];
+      }).length;
+    }
+
+    function setQueueSelection(stageKey, srNo, checked) {
+      var key = queueItemKey(stageKey, srNo);
+      if (checked) selectedQueueItems[key] = true;
+      else delete selectedQueueItems[key];
+      var card = document.getElementById('queue-card-' + stageKey + '-' + srNo);
+      if (card) card.classList.toggle('selected', !!checked);
+      updateBulkApprovalBar(stageKey);
+    }
+
+    function selectAllStageItems(stageKey, checked) {
+      getBulkSelectableItems(stageKey).forEach(function(item) {
+        var key = queueItemKey(item.stageKey, item.srNo);
+        if (checked) selectedQueueItems[key] = true;
+        else delete selectedQueueItems[key];
+      });
+      refreshStageDetail();
+    }
+
+    function updateBulkApprovalBar(stageKey) {
+      var targetStageKey = stageKey || currentStageDetailKey;
+      if (!targetStageKey) return;
+      var selectable = getBulkSelectableItems(targetStageKey);
+      var selectedCount = selectedCountForStage(targetStageKey);
+      var countEl = document.getElementById('bulkSelectedCount');
+      if (countEl) countEl.textContent = selectedCount + ' selected';
+      var btn = document.getElementById('bulkApproveBtn');
+      if (btn) btn.disabled = selectedCount === 0;
+      var selectAll = document.getElementById('bulkSelectAll');
+      if (selectAll) {
+        selectAll.checked = selectable.length > 0 && selectedCount === selectable.length;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < selectable.length;
+      }
+    }
+
+    /** One label/value cell for the material detail grid — skipped entirely when the value is blank. */
+    function detailItem(label, value, extraClass) {
+      if (value === '' || value === undefined || value === null) return '';
+      return '<div class="detail-item' + (extraClass ? ' ' + extraClass : '') + '"><span class="detail-label">' + escapeHtml(label) +
+        '</span><span class="detail-value' + (label === 'Quantity' ? ' detail-qty' : '') + '">' + escapeHtml(String(value)) + '</span></div>';
+    }
+
+    function formatPoAmount(v) {
+      if (v === '' || v === undefined || v === null) return '';
+      var n = Number(v);
+      return isNaN(n) ? String(v) : '₹' + n.toLocaleString('en-IN');
+    }
+
+    /** The material / request details shown on every approval card, plus whatever earlier
+     * stages already captured (Indent No, Vendor, PO Amount, PO No, Challan/Bill No). */
+    function buildMaterialDetailsHtml(item) {
+      return '<div class="detail-grid">' +
+        detailItem('Material Type', item.materialType) +
+        detailItem('Quantity', item.quantity) +
+        detailItem('Entry Type', item.planType) +
+        detailItem('Construction Type', item.constructionType) +
+        detailItem('Block', item.block) +
+        detailItem('LOT', item.lot) +
+        detailItem('Indent No', item.indentNo) +
+        detailItem('Vendor', item.vendorName) +
+        detailItem('PO Amount', formatPoAmount(item.poAmount)) +
+        detailItem('PO No', item.poNo) +
+        detailItem('Challan / Bill No', item.challanBillNo) +
+        detailItem('Requested By', item.requestedBy) +
+        detailItem('Requested On', item.entryTimestamp) +
+        detailItem('Remarks', item.remarks, 'wide') +
+      '</div>';
+    }
+
+    function buildQueueCardHtml(item, s) {
+      var doneLabel = s.statusValues.done;
+      var approverLine = item.approver
+        ? '<div class="queue-sub">Assigned to: <b>' + escapeHtml(item.approver) + '</b></div>' : '';
+      var selectable = item.canAct && canBulkApproveStage(s);
+      var itemKey = queueItemKey(item.stageKey, item.srNo);
+      var selected = !!selectedQueueItems[itemKey];
+      var selectHtml = selectable
+        ? '<label class="queue-select" title="Select for bulk approval"><input type="checkbox" ' + (selected ? 'checked' : '') +
+          ' onchange="setQueueSelection(\'' + item.stageKey + '\', ' + item.srNo + ', this.checked)"></label>'
+        : '<span class="queue-select-placeholder"></span>';
+      var actionHtml = item.canAct
+        ? '<button class="btn small" onclick="openModal(' + item.srNo + ', \'' + item.stageKey + '\')">Mark ' + doneLabel + '</button>'
+        : '<span class="pill pending">' + item.status + '</span>';
+      return '<div class="queue-card' + (selected ? ' selected' : '') + '" id="queue-card-' + item.stageKey + '-' + item.srNo + '">' +
+        selectHtml + '<div class="queue-main">' +
+        '<div><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
+        '<div class="queue-title">' + escapeHtml(item.materialName) + '</div>' +
+        approverLine +
+        '<div class="queue-sub">Planned: ' + (item.planned || '—') +
+          (item.estimatedDeliveryDate ? ' · EDD: ' + item.estimatedDeliveryDate : '') + '</div>' +
+        buildMaterialDetailsHtml(item) +
+        '</div>' +
+        actionHtml + '</div>';
+    }
+
+    function renderQueue(items) {
+      selectedQueueItems = {};
+      queueByStage = {};
+      (items || []).forEach(function(item) {
+        if (!queueByStage[item.stageKey]) queueByStage[item.stageKey] = [];
+        queueByStage[item.stageKey].push(item);
+      });
+      renderQueueTiles();
+    }
+
+    /** Builds the glass preview panel for one stage tile: the first few materials, then a
+     * "+N more · View all" button that opens the full list. */
+    function buildTilePreviewHtml(stageKey, group) {
+      if (!group.length) {
+        return '<div class="glass-panel glass-empty">Nothing pending in this stage right now.</div>';
+      }
+      var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
+        var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity : '';
+        return '<div class="glass-item"><div class="glass-item-main">' +
+          '<div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
+          '<div class="glass-item-sub">#' + item.srNo + ' · ' + escapeHtml(item.project) + '</div></div>' +
+          (qty ? '<div class="glass-item-qty">' + escapeHtml(qty) + '</div>' : '') + '</div>';
+      }).join('');
+      var extra = group.length - TILE_PREVIEW_LIMIT;
+      var moreLabel = extra > 0 ? ('+ ' + extra + ' more · View all') : 'View details';
+      return '<div class="glass-panel">' + rows +
+        '<button class="glass-more" onclick="openStageDetail(\'' + stageKey + '\')">' + moreLabel + '</button></div>';
+    }
+
+    /** Re-renders the stage tiles (and the open stage-detail list, if any) purely from the
+     * current in-memory queueByStage — no server call. Only stages assigned to this user are
+     * shown (myStageKeys). Used both after a fresh fetch (via renderQueue) and for instant
+     * local updates (e.g. right after marking a stage done). */
+    function renderQueueTiles() {
+      var list = document.getElementById('queueList');
+
+      var visible = stageConfig.map(function(s, idx) { return { s: s, idx: idx }; }).filter(function(o) {
+        return !myStageKeys || myStageKeys.indexOf(o.s.key) !== -1;
+      });
+
+      if (!visible.length) {
+        list.innerHTML = '<div class="empty-state">No approval stages are assigned to you.</div>';
+        if (currentStageDetailKey) refreshStageDetail();
+        return;
+      }
+
+      var tiles = visible.map(function(o) {
+        var s = o.s;
+        var group = queueByStage[s.key] || [];
+        var colorClass = 'c' + (o.idx % 4);
+        var icon = STAGE_TILE_ICONS[o.idx % STAGE_TILE_ICONS.length];
+        var countLabel = group.length
+          ? '<div class="stage-tile-count">' + group.length + ' request' + (group.length === 1 ? '' : 's') + ' waiting</div>'
+          : '<div class="stage-tile-count zero">All clear</div>';
+
+        return '<div class="stage-tile ' + colorClass + (group.length ? ' has-items' : '') + '">' +
+            '<button class="stage-tile-expand" onclick="openStageDetail(\'' + s.key + '\')" title="View all">' + EXPAND_ICON_SVG + '</button>' +
+            '<div class="stage-tile-head">' +
+              '<div class="stage-tile-icon">' + icon + '</div>' +
+              '<div><div class="stage-tile-title">' + s.name + '</div>' + countLabel + '</div>' +
+            '</div>' +
+            buildTilePreviewHtml(s.key, group) +
+          '</div>';
+      });
+
+      list.innerHTML = '<div class="stage-tile-grid">' + tiles.join('') + '</div>';
+
+      if (currentStageDetailKey) refreshStageDetail();
+    }
+
+    /** Instantly drops one item out of the in-memory queue and re-renders — called right after
+     * a stage is successfully marked done, so the UI updates immediately instead of waiting on
+     * the next full server round trip (which still happens in the background to reconcile). */
+    function removeFromQueueLocally(srNo, stageKey) {
+      if (queueByStage[stageKey]) {
+        queueByStage[stageKey] = queueByStage[stageKey].filter(function(item) { return item.srNo !== srNo; });
+      }
+      renderQueueTiles();
+    }
+
+    function refreshStageDetail() {
+      var s = stageCfgByKey(currentStageDetailKey);
+      var group = queueByStage[currentStageDetailKey] || [];
+      var selectable = getBulkSelectableItems(currentStageDetailKey);
+      var selectedCount = selectedCountForStage(currentStageDetailKey);
+      var bulkHtml = '';
+      if (group.length && canBulkApproveStage(s) && selectable.length) {
+        var doneLabel = s.statusValues.done;
+        bulkHtml = '<div class="bulk-toolbar">' +
+          '<div class="bulk-left"><label><input type="checkbox" id="bulkSelectAll" onchange="selectAllStageItems(\'' + currentStageDetailKey + '\', this.checked)"> Select all</label>' +
+          '<span class="bulk-count" id="bulkSelectedCount">' + selectedCount + ' selected</span></div>' +
+          '<button class="btn small" id="bulkApproveBtn" onclick="bulkApproveSelected(\'' + currentStageDetailKey + '\')" ' + (selectedCount ? '' : 'disabled') + '>Mark Selected ' + escapeHtml(doneLabel) + '</button>' +
+        '</div>';
+      } else if (group.length && s && s.extra && s.extra.length) {
+        bulkHtml = '<div class="bulk-toolbar"><span class="bulk-note">Bulk approval is unavailable for this stage because each request needs its own details.</span></div>';
+      }
+      document.getElementById('stageDetailSub').textContent = group.length + ' request' + (group.length === 1 ? '' : 's') + ' waiting for approval in this stage';
+      document.getElementById('stageDetailList').innerHTML = group.length
+        ? bulkHtml + group.map(function(item) { return buildQueueCardHtml(item, s); }).join('')
+        : '<div class="empty-state">Nothing pending in this stage.</div>';
+      updateBulkApprovalBar(currentStageDetailKey);
+    }
+
+    function openStageDetail(stageKey) {
+      currentStageDetailKey = stageKey;
+      var s = stageCfgByKey(stageKey);
+      document.getElementById('stageDetailTitle').textContent = s ? s.name : stageKey;
+      refreshStageDetail();
+      navigate('stageDetail', null);
+    }
+
+    function removeManyFromQueueLocally(items) {
+      var byStage = {};
+      (items || []).forEach(function(item) {
+        if (!byStage[item.stageKey]) byStage[item.stageKey] = {};
+        byStage[item.stageKey][Number(item.srNo)] = true;
+        delete selectedQueueItems[queueItemKey(item.stageKey, item.srNo)];
+      });
+      Object.keys(byStage).forEach(function(stageKey) {
+        if (!queueByStage[stageKey]) return;
+        queueByStage[stageKey] = queueByStage[stageKey].filter(function(item) {
+          return !byStage[stageKey][Number(item.srNo)];
+        });
+      });
+      renderQueueTiles();
+    }
+
+    function bulkApproveSelected(stageKey) {
+      var selectedItems = getBulkSelectableItems(stageKey).filter(function(item) {
+        return !!selectedQueueItems[queueItemKey(item.stageKey, item.srNo)];
+      });
+      if (!selectedItems.length) return;
+      var s = stageCfgByKey(stageKey);
+      var doneLabel = s.statusValues.done;
+      if (!confirm('Mark ' + selectedItems.length + ' selected request' + (selectedItems.length === 1 ? '' : 's') + ' as ' + doneLabel + '?')) return;
+
+      var btn = document.getElementById('bulkApproveBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+      google.script.run
+        .withSuccessHandler(function(res) {
+          var results = (res && res.results) || [];
+          var successful = results.filter(function(r) { return r.success; });
+          if (successful.length) removeManyFromQueueLocally(successful);
+          loadDashboard();
+          loadQueue();
+          loadRequests();
+
+          var failures = results.filter(function(r) { return !r.success; });
+          if (failures.length) {
+            var lines = failures.slice(0, 5).map(function(r) {
+              return '#' + r.srNo + ': ' + (r.error || 'Failed');
+            });
+            alert(successful.length + ' approved. ' + failures.length + ' failed.\n\n' + lines.join('\n'));
+          }
+        })
+        .withFailureHandler(function(err) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Mark Selected ' + doneLabel; }
+          alert(err.message || 'Failed to approve selected requests.');
+        })
+        .imsApprovalActOnStages({
+          items: selectedItems.map(function(item) { return { srNo: item.srNo, stageKey: item.stageKey }; }),
+          asEmail: testAsEmail || ''
+        });
+    }
+
+    // ---------- CANCEL ENTRY ----------
+    function loadCancelList() {
+      var list = document.getElementById('cancelList');
+      list.innerHTML = '<div class="spinner"></div>';
+      google.script.run
+        .withSuccessHandler(function(reqs) { allRequests = reqs; renderCancelList(); })
+        .withFailureHandler(function(err) { list.innerHTML = '<div class="empty-state">Failed to load: ' + err.message + '</div>'; })
+        .imsApprovalGetRequests(testAsEmail || '');
+    }
+
+    function renderCancelList() {
+      var list = document.getElementById('cancelList');
+      if (!allRequests.length) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; return; }
+      list.innerHTML = allRequests.map(renderCancelCard).join('');
+    }
+
+    function renderCancelCard(req) {
+      var metaLine = requestMetaLine(req);
+      var canCancel = !!req.canCancel;
+      var statusPill = req.cancelled
+        ? '<span class="pill cancelled">Cancelled</span>'
+        : '<span class="pill ' + (req.overallStatus === 'Done' ? 'done' : 'pending') + '">' + req.overallStatus + '</span>';
+      var cancelledLine = req.cancelled
+        ? '<div class="req-sub">Cancelled by ' + escapeHtml(req.cancelledBy || '—') + ' · ' + (req.cancelledAt || '—') +
+          (req.cancelReason ? ' · Reason: ' + escapeHtml(req.cancelReason) : '') + '</div>'
+        : '';
+      var actionHtml = canCancel
+        ? '<button class="btn small danger" onclick="openCancelModal(' + req.srNo + ')">Cancel Entry</button>'
+        : (req.cancelled ? '' : '<span class="restricted-note">Only the requester, an admin, or a user in Access Control → Cancel Permission can cancel this</span>');
+
+      return '<div class="req-card' + (req.cancelled ? ' is-cancelled' : '') + '"><div class="req-header" style="cursor:default;">' +
+        '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> ' + statusPill + '</div>' +
+        '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
+        (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
+        '<div class="req-sub">By ' + escapeHtml(req.userEmail) + ' · ' + req.entryTimestamp +
+          (req.estimatedDeliveryDate ? ' · EDD: ' + req.estimatedDeliveryDate : '') +
+          (req.remarks ? ' · ' + escapeHtml(req.remarks) : '') + '</div>' +
+        cancelledLine + '</div>' +
+        actionHtml +
+      '</div></div>';
+    }
+
+    var cancelModalSrNo = null;
+
+    function openCancelModal(srNo) {
+      cancelModalSrNo = srNo;
+      document.getElementById('cancelModalTitle').textContent = 'Cancel Request #' + srNo;
+      document.getElementById('cancelReasonInput').value = '';
+      var today = new Date();
+      var iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      document.getElementById('cancelDateInput').value = iso;
+      document.getElementById('cancelModalMsg').className = 'msg';
+      document.getElementById('cancelModalMsg').textContent = '';
+      document.getElementById('cancelModalOverlay').classList.add('open');
+    }
+
+    function closeCancelModal() {
+      document.getElementById('cancelModalOverlay').classList.remove('open');
+      cancelModalSrNo = null;
+    }
+
+    function confirmCancel() {
+      if (!cancelModalSrNo) return;
+      var reason = document.getElementById('cancelReasonInput').value.trim();
+      var cancelDate = document.getElementById('cancelDateInput').value;
+      var msg = document.getElementById('cancelModalMsg');
+      if (!reason) { msg.className = 'msg error'; msg.textContent = 'Cancel Reason is required.'; return; }
+      if (!cancelDate) { msg.className = 'msg error'; msg.textContent = 'Cancel Date is required.'; return; }
+
+      var srNo = cancelModalSrNo;
+      var btn = document.getElementById('cancelModalConfirmBtn');
+      btn.disabled = true; btn.textContent = 'Cancelling...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Confirm Cancellation';
+          if (res.success) {
+            closeCancelModal();
+            loadCancelList();
+            loadDashboard();
+            var extra = res.qtyRestored ? (' Remaining restored to ' + res.remainingAfter + '.') : '';
+            alert('Request #' + srNo + ' cancelled.' + extra);
+          } else {
+            msg.className = 'msg error'; msg.textContent = res.error || 'Failed to cancel the request.';
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Confirm Cancellation';
+          msg.className = 'msg error'; msg.textContent = err.message || 'Failed to cancel the request.';
+        })
+        .imsApprovalCancelRequest({ srNo: srNo, reason: reason, cancelDate: cancelDate, asEmail: testAsEmail || '' });
+    }
+
+    // ---------- VENDOR MASTER ----------
+    function loadVendors() {
+      var list = document.getElementById('vendorList');
+      list.innerHTML = '<div class="spinner"></div>';
+      document.getElementById('vendorSearchInput').value = '';
+      google.script.run.withSuccessHandler(function(vendors) {
+        vendorsCache = vendors;
+        renderVendorList(vendors);
+      }).imsApprovalGetVendors();
+    }
+
+    function renderVendorList(vendors) {
+      var list = document.getElementById('vendorList');
+      list.innerHTML = vendors.length ? vendors.map(function(v) {
+        return '<div class="master-list-item"><span>' + escapeHtml(v) + '</span></div>';
+      }).join('') : '<div class="empty-state">No matching vendors.</div>';
+    }
+
+    function filterVendorList() {
+      var q = document.getElementById('vendorSearchInput').value.trim().toLowerCase();
+      var filtered = !q ? vendorsCache : vendorsCache.filter(function(v) { return v.toLowerCase().indexOf(q) !== -1; });
+      renderVendorList(filtered);
+    }
+
+    // ---------- MATERIAL MASTER ----------
+    function loadMaterials() {
+      var list = document.getElementById('materialList');
+      list.innerHTML = '<div class="spinner"></div>';
+      document.getElementById('materialSearchInput').value = '';
+      google.script.run.withSuccessHandler(function(materials) {
+        materialsCache = materials;
+        renderMaterialList(materials);
+      }).imsApprovalGetMaterials();
+    }
+
+    function renderMaterialList(materials) {
+      var list = document.getElementById('materialList');
+      list.innerHTML = materials.length ? materials.map(function(m) {
+        return '<div class="master-list-item"><span>' + escapeHtml(m) + '</span></div>';
+      }).join('') : '<div class="empty-state">No matching materials.</div>';
+    }
+
+    function filterMaterialList() {
+      var q = document.getElementById('materialSearchInput').value.trim().toLowerCase();
+      var filtered = !q ? materialsCache : materialsCache.filter(function(m) { return m.toLowerCase().indexOf(q) !== -1; });
+      renderMaterialList(filtered);
+    }
+
+    // ---------- PURCHASE ORDER / INVOICES / GOODS RECEIVED (number-based lookups) ----------
+    function ensureRequestsLoaded(cb) {
+      if (allRequests && allRequests.length) { cb(); return; }
+      google.script.run.withSuccessHandler(function(reqs) { allRequests = reqs; cb(); }).imsApprovalGetRequests(testAsEmail || '');
+    }
+
+    function searchByPO() {
+      var q = document.getElementById('poSearchInput').value.trim().toLowerCase();
+      var out = document.getElementById('poResults');
+      if (!q) { out.innerHTML = ''; return; }
+      ensureRequestsLoaded(function() {
+        var matches = activeRequests(allRequests).filter(function(r) {
+          var v = r.stages.poMaking && r.stages.poMaking.poNo;
+          return v && v.toString().toLowerCase().indexOf(q) !== -1;
+        });
+        renderLookupResults(out, matches, ['poMaking', 'poEntry', 'poRate']);
+      });
+    }
+
+    function searchByIndent() {
+      var q = document.getElementById('indentSearchInput').value.trim().toLowerCase();
+      var out = document.getElementById('indentResults');
+      if (!q) { out.innerHTML = ''; return; }
+      ensureRequestsLoaded(function() {
+        var matches = activeRequests(allRequests).filter(function(r) {
+          var v = r.stages.indent && r.stages.indent.indentNo;
+          return v && v.toString().toLowerCase().indexOf(q) !== -1;
+        });
+        renderLookupResults(out, matches, ['indent']);
+      });
+    }
+
+    function searchByChallan() {
+      var q = document.getElementById('challanSearchInput').value.trim().toLowerCase();
+      var out = document.getElementById('challanResults');
+      if (!q) { out.innerHTML = ''; return; }
+      ensureRequestsLoaded(function() {
+        var matches = activeRequests(allRequests).filter(function(r) {
+          var v = r.stages.delivery && r.stages.delivery.challanBillNo;
+          return v && v.toString().toLowerCase().indexOf(q) !== -1;
+        });
+        renderLookupResults(out, matches, ['delivery', 'grn']);
+      });
+    }
+
+    function renderLookupResults(out, matches, highlightStageKeys) {
+      if (!matches.length) { out.innerHTML = '<div class="empty-state">No matching request found.</div>'; return; }
+      out.innerHTML = matches.map(function(req) {
+        var rows = highlightStageKeys.map(function(key) {
+          var s = stageCfgByKey(key);
+          var sd = req.stages[key];
+          if (!s || !sd) return '';
+          if (!sd.isMyStage) {
+            return '<div class="restricted-row"><div class="stage-name">' + s.name + '</div>' +
+              '<span class="restricted-note">Restricted</span></div>';
+          }
+          var extraHtml = (s.extra || []).map(function(ex) {
+            return sd[ex.key] ? ('<span>' + ex.label + ': <b>' + escapeHtml(sd[ex.key].toString()) + '</b></span>') : '';
+          }).join('');
+          var pillClass = sd.status === s.statusValues.done ? 'done' : 'pending';
+          return '<div class="stage-row"><div class="stage-name-col"><div class="stage-name">' + s.name + '</div></div>' +
+            '<div class="stage-dates"><span>Planned: <b>' + (sd.planned || '—') + '</b></span>' +
+            '<span>Actual: <b>' + (sd.actual || '—') + '</b></span>' + extraHtml +
+            '<span class="pill ' + pillClass + '">' + sd.status + '</span></div></div>';
+        }).join('');
+        var metaLine = requestMetaLine(req);
+        return '<div class="req-card"><div class="req-header" style="cursor:default;">' +
+          '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span></div>' +
+          '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
+          (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
+          '<div class="req-sub">' + escapeHtml(req.materialType || '') + (req.estimatedDeliveryDate ? ' · EDD: ' + req.estimatedDeliveryDate : '') + '</div></div>' +
+          '<span class="pill ' + (req.overallStatus === 'Done' ? 'done' : 'pending') + '">' + req.overallStatus + '</span></div>' +
+          '<div class="req-body open">' + rows + '</div></div>';
+      }).join('');
+    }
+
+    function runGlobalSearch() {
+      var q = document.getElementById('globalSearch').value.trim();
+      if (!q) return;
+      navigate('purchaseOrder', document.querySelector('[data-page=purchaseOrder]'));
+      document.getElementById('poSearchInput').value = q;
+      searchByPO();
+    }
+
+    // ---------- Action modal (shared by Approval Flow / Purchase Request / lookups) ----------
+    function openModal(srNo, stageKey) {
+      var stageDef = stageCfgByKey(stageKey);
+      modalCtx = { srNo: srNo, stageKey: stageKey, stageDef: stageDef };
+      document.getElementById('modalTitle').textContent = 'Mark "' + stageDef.name + '" ' + stageDef.statusValues.done + ' — Request #' + srNo;
+      var extraHtml = '';
+      (stageDef.extra || []).forEach(function(ex) {
+        if (ex.key === 'advancePaymentRequired') {
+          extraHtml += '<div class="field"><label>' + ex.label + '</label>' +
+            '<select id="extra-' + ex.key + '"><option value="">Select...</option><option value="No">No</option><option value="Yes">Yes</option></select></div>';
+        } else if (ex.key === 'poAmount') {
+          extraHtml += '<div class="field"><label>' + ex.label + '</label>' +
+            '<input type="number" id="extra-' + ex.key + '" placeholder="Enter ' + ex.label + '" min="0" step="1"></div>';
+        } else if (ex.dropdown === 'vendor') {
+          var options = '<option value="">Select vendor...</option>' + vendorsCache.map(function(v) {
+            return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+          }).join('');
+          extraHtml += '<div class="field"><label>' + ex.label + '</label><select id="extra-' + ex.key + '">' + options + '</select></div>';
+        } else {
+          extraHtml += '<div class="field"><label>' + ex.label + '</label>' +
+            '<input type="text" id="extra-' + ex.key + '" placeholder="Enter ' + ex.label + '"></div>';
+        }
+      });
+      document.getElementById('modalExtraFields').innerHTML = extraHtml;
+      document.getElementById('modalMsg').className = 'msg';
+      document.getElementById('modalMsg').textContent = '';
+      document.getElementById('modalConfirmBtn').textContent = 'Confirm ' + stageDef.statusValues.done;
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('open');
+      modalCtx = null;
+    }
+
+    function confirmAction() {
+      if (!modalCtx) return;
+      var extraFields = {};
+      var missingRequired = null;
+      (modalCtx.stageDef.extra || []).forEach(function(ex) {
+        var el = document.getElementById('extra-' + ex.key);
+        if (el) extraFields[ex.key] = el.value.trim ? el.value.trim() : el.value;
+        if (ex.key === 'advancePaymentRequired' && !extraFields[ex.key]) {
+          missingRequired = 'Please select Yes or No for Advance Payment Required.';
+        }
+      });
+      if (missingRequired) {
+        var m0 = document.getElementById('modalMsg'); m0.className = 'msg error'; m0.textContent = missingRequired;
+        return;
+      }
+      var btn = document.getElementById('modalConfirmBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      var doneLabelForBtn = modalCtx.stageDef.statusValues.done;
+      var actedSrNo = modalCtx.srNo;
+      var actedStageKey = modalCtx.stageKey;
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn;
+          if (res.success) {
+            closeModal();
+            removeFromQueueLocally(actedSrNo, actedStageKey); // instant — don't wait on the slower full reload below
+            loadDashboard();
+            loadQueue();
+            loadRequests();
+          } else {
+            var m = document.getElementById('modalMsg'); m.className = 'msg error'; m.textContent = res.error || 'Failed.';
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn;
+          var m = document.getElementById('modalMsg'); m.className = 'msg error'; m.textContent = err.message || 'Failed.';
+        })
+        .imsApprovalActOnStage({ srNo: modalCtx.srNo, stageKey: modalCtx.stageKey, extraFields: extraFields, asEmail: testAsEmail || '' });
+    }
+
+    function escapeHtml(str) {
+      if (!str && str !== 0) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    init();
+  </script>
+
+</body>
+</html>
