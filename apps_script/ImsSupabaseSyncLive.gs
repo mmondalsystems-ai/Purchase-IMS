@@ -36,18 +36,18 @@ var ImsSupabaseSync_QTY_TAB = 'Material Quantity Master';
 
 var ImsSupabaseSync_REQ_KEYS = [
   'sr_no', 'project', 'planned', 'construction_type', 'block', 'lot', 'material_name',
-  'material_type', 'quantity', 'estimated_delivery_date', 'status', 'entry_status',
+  'material_type', 'uom', 'quantity', 'estimated_delivery_date', 'status', 'entry_status',
   'cancelled', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'user_email', 'remarks',
   'entry_timestamp'
 ];
 var ImsSupabaseSync_STAGE_KEYS = [
   'approval', 'approval2', 'wbs', 'indent', 'poRate', 'poEntry', 'rateApproval',
-  'poMaking', 'advancePayment', 'delivery', 'grn', 'truckEntry'
+  'advancePayment', 'delivery', 'grn', 'truckEntry'
 ];
 var ImsSupabaseSync_STAGE_FIELDS = ['approver', 'planned_at', 'actual_at', 'delay_days', 'status', 'approved_by'];
 var ImsSupabaseSync_EXTRA_KEYS = [
   'indent_indentNo', 'poRate_remarks', 'poEntry_vendorName', 'poEntry_poAmount',
-  'poMaking_poNo', 'poMaking_advancePaymentRequired', 'delivery_challanBillNo'
+  'poEntry_poNo', 'poEntry_advancePaymentRequired', 'delivery_challanBillNo'
 ];
 
 // Header text (normalised: lower case, letters and digits only) -> key, for auto matching.
@@ -270,22 +270,42 @@ function ImsSupabaseSync_applyRequests_(sheet, requests) {
   }
 }
 
-/** Refreshes the Remaining column (G) of the Material Quantity Master tab. */
+/** Column indexes (0-based, -1 = missing) of the Material Quantity Master tab, found by header text. */
+function ImsSupabaseSync_qtyCols_(headerRow) {
+  var want = {
+    status: 'Material Status', ctype: 'Construction Type', block: 'Block', lot: 'LOT',
+    material: 'Material Name', uom: 'UOM', total: 'Total Qty (Fixed)', remaining: 'Remaining', project: 'Project'
+  };
+  var out = {};
+  Object.keys(want).forEach(function (k) {
+    out[k] = -1;
+    for (var i = 0; i < headerRow.length; i++) {
+      if (String(headerRow[i] === null ? '' : headerRow[i]).trim().toLowerCase() === want[k].toLowerCase()) { out[k] = i; break; }
+    }
+  });
+  return out;
+}
+
+/** Refreshes the Remaining column of the Material Quantity Master tab (column found by header). */
 function ImsSupabaseSync_applyQty_(qtyRows) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ImsSupabaseSync_QTY_TAB);
   if (!sheet) return;
-  var last = sheet.getLastRow();
-  if (last < 2) return;
-  var values = sheet.getRange(2, 1, last - 1, 8).getValues();
-  var forms = sheet.getRange(2, 7, last - 1, 1).getFormulas();
+  var last = sheet.getLastRow(), lastCol = sheet.getLastColumn();
+  if (last < 2 || lastCol < 1) return;
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var c = ImsSupabaseSync_qtyCols_(header);
+  if (c.remaining < 0 || c.material < 0 || c.project < 0) return;
+  var g = function (r, k) { return c[k] >= 0 ? r[c[k]] : ''; };
+  var values = sheet.getRange(2, 1, last - 1, lastCol).getValues();
+  var forms = sheet.getRange(2, c.remaining + 1, last - 1, 1).getFormulas();
   var rowByCombo = {}, seen = {};
   for (var i = 0; i < values.length; i++) {
     var r = values[i];
-    var material = ImsSupabaseSync_text_(r[4]);
-    var project = ImsSupabaseSync_text_(r[7]);
+    var material = ImsSupabaseSync_text_(g(r, 'material'));
+    var project = ImsSupabaseSync_text_(g(r, 'project'));
     if (!material && !project) continue;
-    var combo = [project, ImsSupabaseSync_text_(r[1]), ImsSupabaseSync_text_(r[2]),
-                 ImsSupabaseSync_text_(r[3]), material].join('\u0001');
+    var combo = [project, ImsSupabaseSync_text_(g(r, 'ctype')), ImsSupabaseSync_text_(g(r, 'block')),
+                 ImsSupabaseSync_text_(g(r, 'lot')), material].join('\u0001');
     seen[combo] = (seen[combo] || 0) + 1;
     rowByCombo[combo + '\u0002' + seen[combo]] = i;
   }
@@ -293,10 +313,10 @@ function ImsSupabaseSync_applyQty_(qtyRows) {
     var combo = [q.project, q.construction_type, q.block, q.lot, q.material_name].join('\u0001');
     var idx = rowByCombo[combo + '\u0002' + q.dup_no];
     if (idx === undefined || forms[idx][0]) return;
-    var current = values[idx][6];
+    var current = values[idx][c.remaining];
     var next = (q.remaining === null || q.remaining === undefined) ? '' : Number(q.remaining);
     if (String(current === '' ? '' : Number(current)) !== String(next)) {
-      sheet.getRange(idx + 2, 7).setValue(next);
+      sheet.getRange(idx + 2, c.remaining + 1).setValue(next);
     }
   });
 }
@@ -470,8 +490,8 @@ function ImsSupabaseSync_normHeader_(text) {
 function ImsSupabaseSync_stageAliases_() {
   var stageLabels = {
     approval: 'Approval Stage', approval2: '2nd Approval Stage', wbs: 'WBS Stage', indent: 'Indent Stage',
-    poRate: 'PO Rate Stage', poEntry: 'PO Entry Stage', rateApproval: 'Rate Approval Stage',
-    poMaking: 'PO making Stage', advancePayment: 'Advance Payment Stage', delivery: 'Delivery Stage',
+    poRate: 'PO Rate Stage', poEntry: 'PO Preparation Stage', rateApproval: 'Rate Approval Stage',
+    advancePayment: 'Advance Payment Stage', delivery: 'Delivery Stage',
     grn: 'GRN Stage', truckEntry: 'Truck Entry Stage'
   };
   var fieldLabels = {
@@ -481,10 +501,10 @@ function ImsSupabaseSync_stageAliases_() {
   var extraLabels = {
     indent_indentNo: 'Indent Stage - Indent No',
     poRate_remarks: 'PO Rate Stage - Remarks',
-    poEntry_vendorName: 'PO Entry Stage - Vendor Name',
-    poEntry_poAmount: 'PO Entry Stage - PO Amount',
-    poMaking_poNo: 'PO making Stage - PO No',
-    poMaking_advancePaymentRequired: 'PO making Stage - Advance Payment Required',
+    poEntry_vendorName: 'PO Preparation Stage - Vendor Name',
+    poEntry_poAmount: 'PO Preparation Stage - PO Amount',
+    poEntry_poNo: 'PO Preparation Stage - PO No',
+    poEntry_advancePaymentRequired: 'PO Preparation Stage - Advance Payment Required',
     delivery_challanBillNo: 'Delivery Stage - Challan No./Bill No.'
   };
   var out = {};
@@ -496,6 +516,12 @@ function ImsSupabaseSync_stageAliases_() {
   Object.keys(extraLabels).forEach(function (k) {
     out[ImsSupabaseSync_normHeader_(extraLabels[k])] = k;
   });
+  // Older sheets still carry the "PO Entry Stage" headers for the same stage; match them too.
+  Object.keys(fieldLabels).forEach(function (f) {
+    out[ImsSupabaseSync_normHeader_('PO Entry Stage ' + fieldLabels[f])] = 'poEntry_' + f;
+  });
+  out[ImsSupabaseSync_normHeader_('PO Entry Stage - Vendor Name')] = 'poEntry_vendorName';
+  out[ImsSupabaseSync_normHeader_('PO Entry Stage - PO Amount')] = 'poEntry_poAmount';
   return out;
 }
 

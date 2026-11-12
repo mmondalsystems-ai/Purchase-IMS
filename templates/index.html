@@ -716,7 +716,7 @@
       <nav id="navList">
         <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">🏠 Dashboard</div>
         <div class="nav-item" data-page="newEntry" onclick="navigate('newEntry', this)">➕ New Entry</div>
-        <div class="nav-item" data-page="purchaseRequest" onclick="navigate('purchaseRequest', this)">📋 Purchase Request</div>
+        <div class="nav-item" data-page="purchaseRequest" onclick="purchaseRequestFocusSrNos=null; navigate('purchaseRequest', this)">📋 Purchase Request</div>
         <div class="nav-item" data-page="approvalFlow" onclick="navigate('approvalFlow', this)">✅ Approval Flow</div>
         <div class="nav-item" data-page="cancelEntry" onclick="navigate('cancelEntry', this)">🚫 Cancel Entry</div>
         <div class="nav-item" data-page="vendorMaster" onclick="navigate('vendorMaster', this)">👥 Vendor Master</div>
@@ -732,7 +732,7 @@
       <div id="topbar">
         <button id="mobileMenuBtn" type="button" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
         <div class="app-title">🛒 Purchase IMS</div>
-        <div class="search"><input type="text" id="globalSearch" placeholder="Search by PO No, Vendor, PR No..." onkeydown="if(event.key==='Enter') runGlobalSearch()"></div>
+        <div class="search"><input type="text" id="globalSearch" placeholder="Search by PO No, Challan No./Bill No., Indent No, or Sr No..." onkeydown="if(event.key==='Enter') runGlobalSearch()"></div>
         <div id="testAsControl" style="display:none; align-items:center; gap:6px;">
           <input type="email" id="testAsInput" placeholder="email to test as..." style="min-height:36px; padding:0 10px; border:1px solid #dce4ef; border-radius:8px; font-size:12.5px; width:190px;" onkeydown="if(event.key==='Enter') startTestAs()">
           <button class="btn small outline" onclick="startTestAs()">Test As</button>
@@ -804,6 +804,10 @@
                 <select id="f-material" disabled onchange="onMaterialNameChange()"><option value="">Select LOT first...</option></select>
               </div>
               <div class="field">
+                <label>UOM (auto-filled) *</label>
+                <input type="text" id="f-uom" disabled placeholder="Select a material first...">
+              </div>
+              <div class="field">
                 <label>Quantity (auto-filled from Remaining) *</label>
                 <input type="text" id="f-quantity" disabled placeholder="Select a material first...">
                 <div class="field-hint" id="remainingHint">Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.</div>
@@ -814,6 +818,10 @@
               <div class="field">
                 <label>Material Name *</label>
                 <select id="f-material-manual"><option value="">Select material...</option></select>
+              </div>
+              <div class="field">
+                <label>UOM *</label>
+                <select id="f-uom-manual"><option value="">Select UOM...</option></select>
               </div>
               <div class="field">
                 <label>Quantity *</label>
@@ -889,7 +897,9 @@
 
         <!-- MATERIAL MASTER -->
         <div id="page-materialMaster" class="page">
-          <div class="page-header"><div><h1 class="page-title">Material Master</h1><p class="page-sub">Existing materials used across purchase requests</p></div></div>
+          <div class="page-header"><div><h1 class="page-title">Material Master</h1><p class="page-sub">Existing materials used across purchase requests</p></div>
+            <button class="btn" onclick="window.open('https://script.google.com/a/macros/oswalgroup.net/s/AKfycbwBr6Mk_VUlU6ztB-jN2n_3eqraAZTlDMNbl4QvvYct79u2jNTjKkGJ6Nj2RCB4_Cw1/exec', '_blank')">+ Add Material</button>
+          </div>
           <div class="card" style="max-width:480px;">
             <input type="text" id="materialSearchInput" placeholder="Search materials..." style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;" oninput="filterMaterialList()">
           </div>
@@ -973,10 +983,19 @@
   <script>
     var stageConfig = [];
     var allRequests = [];
+    // When set (by the global search), the Purchase Request page shows only these Sr Nos
+    // instead of the full list, each with its COMPLETE flow (every stage) — cleared whenever
+    // the page is opened normally from the sidebar.
+    var purchaseRequestFocusSrNos = null;
     var vendorsCache = [];
     var materialsCache = [];
     var qtyMasterCache = []; // Material Quantity Master rows, scoped to the currently selected project
+    // Fixed UOM options offered for Non Planned entries (Planned entries auto-fill UOM from
+    // Material Quantity Master instead). Sourced from the UOM values actually in use across
+    // the Material Quantity Master, deduplicated and uppercased.
+    var UOM_OPTIONS = ['NOS','PAIR','MTR','BAGS','KG','SQFT','MT','SET','BOX','PKT','CFT','ROLL','LTR','PCS','LOT','JOB','CUM','RMT','FOOT','LS','NO','SQM','CAN','BAG','FT','GRM','TRUCK','RIM','DRUM','ML'];
     var modalCtx = null;
+    var bulkModalCtx = null;
     var loadedPages = {};
     var currentUserEmail = '';
     var isAdminUser = false;
@@ -1104,7 +1123,7 @@
 
     function renderDashboard(reqs) {
       var totalRequests = reqs.length;
-      var approvedPO = reqs.filter(function(r){ return r.stages.poMaking && r.stages.poMaking.status === 'Done'; }).length;
+      var approvedPO = reqs.filter(function(r){ return r.stages.poEntry && r.stages.poEntry.status === 'Done'; }).length;
       var goodsReceived = reqs.filter(function(r){ return r.stages.grn && r.stages.grn.status === 'Done'; }).length;
       var totalValue = reqs.reduce(function(sum, r) {
         var amt = r.stages.poEntry ? Number(r.stages.poEntry.poAmount) : 0;
@@ -1259,6 +1278,11 @@
 
     function resetManualFields() {
       document.getElementById('f-quantity-manual').value = '';
+      var uomSel = document.getElementById('f-uom-manual');
+      uomSel.innerHTML = '<option value="">Select UOM...</option>' + UOM_OPTIONS.map(function(u) {
+        return '<option value="' + escapeHtml(u) + '">' + escapeHtml(u) + '</option>';
+      }).join('');
+      uomSel.value = '';
       var sel = document.getElementById('f-material-manual');
       sel.innerHTML = '<option value="">Select material...</option>' + materialsCache.map(function(m) {
         return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>';
@@ -1328,8 +1352,8 @@
       var matches = qtyMasterCache.filter(function(r){ return r.constructionType === ct && r.block === block && r.lot === lot; });
       if (matches.length) {
         sel.innerHTML = '<option value="">Select material...</option>' + matches.map(function(r) {
-          return '<option value="' + escapeHtml(r.materialName) + '" data-remaining="' + r.remaining + '">' +
-            escapeHtml(r.materialName) + ' (Remaining: ' + r.remaining + ')</option>';
+          return '<option value="' + escapeHtml(r.materialName) + '" data-remaining="' + r.remaining + '" data-uom="' + escapeHtml(r.uom || '') + '">' +
+            escapeHtml(r.materialName) + ' (Remaining: ' + r.remaining + (r.uom ? ' ' + r.uom : '') + ')</option>';
         }).join('');
         sel.disabled = false;
       } else {
@@ -1342,14 +1366,18 @@
       var sel = document.getElementById('f-material');
       var opt = sel.options[sel.selectedIndex];
       var remaining = opt ? opt.getAttribute('data-remaining') : null;
+      var uom = opt ? opt.getAttribute('data-uom') : null;
       var qtyInput = document.getElementById('f-quantity');
+      var uomInput = document.getElementById('f-uom');
       var hint = document.getElementById('remainingHint');
       if (remaining === null || remaining === undefined || !opt.value) {
         qtyInput.value = '';
+        uomInput.value = '';
         hint.textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
         return;
       }
       qtyInput.value = remaining;
+      uomInput.value = uom || '';
       var remNum = Number(remaining);
       if (isNaN(remNum) || remNum <= 0) {
         hint.innerHTML = '<span style="color:var(--danger); font-weight:600;">Remaining is ' + remaining + ' — nothing left to request for this material.</span>';
@@ -1360,6 +1388,7 @@
 
     function clearQuantity() {
       document.getElementById('f-quantity').value = '';
+      document.getElementById('f-uom').value = '';
       document.getElementById('remainingHint').textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
     }
 
@@ -1368,7 +1397,7 @@
     function submitRequest() {
       var project = document.getElementById('f-project').value;
       var isPlanned = entryMode === 'planned';
-      var constructionType, block, lot, material, quantity;
+      var constructionType, block, lot, material, quantity, uom;
 
       if (isPlanned) {
         constructionType = document.getElementById('f-constructiontype').value.trim();
@@ -1376,12 +1405,14 @@
         lot = document.getElementById('f-lot').value.trim();
         material = document.getElementById('f-material').value;
         quantity = document.getElementById('f-quantity').value;
+        uom = document.getElementById('f-uom').value.trim();
       } else {
         constructionType = '';
         block = '';
         lot = '';
         material = document.getElementById('f-material-manual').value;
         quantity = document.getElementById('f-quantity-manual').value;
+        uom = document.getElementById('f-uom-manual').value.trim();
       }
 
       var materialType = document.getElementById('f-materialtype').value;
@@ -1407,6 +1438,9 @@
       }
       if (!quantity || Number(quantity) <= 0) {
         msg.className = 'msg error'; msg.textContent = 'Quantity must be greater than 0.'; return;
+      }
+      if (!uom) {
+        msg.className = 'msg error'; msg.textContent = 'UOM is required.'; return;
       }
 
       btn.disabled = true; btn.textContent = 'Submitting...';
@@ -1439,7 +1473,7 @@
         .imsApprovalSubmitRequest({
           project: project, planned: isPlanned ? 'Planned' : 'Non Planned',
           constructionType: constructionType, block: block, lot: lot,
-          materialName: material, materialType: materialType, quantity: quantity,
+          materialName: material, materialType: materialType, quantity: quantity, uom: uom,
           estimatedDeliveryDate: edd, remarks: remarks, entryStatus: entryStatus
         });
     }
@@ -1461,15 +1495,26 @@
 
     function isStageApplicable(req, key) {
       if (key !== 'advancePayment') return true;
-      var advReq = req.stages['poMaking'] && req.stages['poMaking'].advancePaymentRequired;
+      var advReq = req.stages['poEntry'] && req.stages['poEntry'].advancePaymentRequired;
       return advReq === 'Yes';
     }
 
     function renderRequests() {
       var list = document.getElementById('reqList');
       var reqs = activeRequests(allRequests);
-      if (reqs.length === 0) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; return; }
-      list.innerHTML = reqs.map(renderRequestCard).join('');
+      var banner = '';
+      if (purchaseRequestFocusSrNos !== null) {
+        var focusSet = {};
+        purchaseRequestFocusSrNos.forEach(function(n) { focusSet[Number(n)] = true; });
+        reqs = reqs.filter(function(r) { return !!focusSet[Number(r.srNo)]; });
+        var bannerText = purchaseRequestFocusSrNos.length
+          ? 'Showing ' + purchaseRequestFocusSrNos.map(function(n) { return '#' + n; }).join(', ') + ' only (from search) — full flow below.'
+          : 'No request matched that search.';
+        banner = '<div class="bulk-toolbar" style="margin-bottom:14px;"><span>' + bannerText + '</span>' +
+          '<button class="btn small" onclick="purchaseRequestFocusSrNos=null; renderRequests();">View all requests</button></div>';
+      }
+      if (reqs.length === 0) { list.innerHTML = banner + '<div class="empty-state">No requests yet.</div>'; return; }
+      list.innerHTML = banner + reqs.map(renderRequestCard).join('');
     }
 
     function requestMetaLine(req) {
@@ -1622,7 +1667,13 @@
     }
 
     function canBulkApproveStage(stageDef) {
-      return !!stageDef && !(stageDef.extra && stageDef.extra.length);
+      if (!stageDef) return false;
+      // PO Preparation Stage is a special case: it DOES have required extra fields
+      // (Vendor Name / PO Amount / PO No / Advance Payment Required), but many
+      // requests often share the same PO No, so selecting several and filling
+      // those fields once (via the shared-fields modal) is still supported.
+      if (stageDef.key === 'poEntry') return true;
+      return !(stageDef.extra && stageDef.extra.length);
     }
 
     function getBulkSelectableItems(stageKey) {
@@ -1707,6 +1758,7 @@
 
     function buildQueueCardHtml(item, s) {
       var doneLabel = s.statusValues.done;
+      var stageLine = '<div class="queue-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b></div>';
       var approverLine = item.approver
         ? '<div class="queue-sub">Assigned to: <b>' + escapeHtml(item.approver) + '</b></div>' : '';
       var selectable = item.canAct && canBulkApproveStage(s);
@@ -1716,6 +1768,12 @@
         ? '<label class="queue-select" title="Select for bulk approval"><input type="checkbox" ' + (selected ? 'checked' : '') +
           ' onchange="setQueueSelection(\'' + item.stageKey + '\', ' + item.srNo + ', this.checked)"></label>'
         : '<span class="queue-select-placeholder"></span>';
+      // On the right side: when this stage can't be acted on yet because an earlier stage
+      // hasn't been approved, show exactly which one is holding it up, above the status pill.
+      var waitingOnHtml = (!item.canAct && item.blockedByStageName)
+        ? '<div class="queue-sub" style="text-align:right; margin-bottom:4px;">Waiting on: <b>' + escapeHtml(item.blockedByStageName) + '</b>' +
+          '<br>(' + escapeHtml(item.blockedByApprover || 'no approver set for this project') + ')' + '</div>'
+        : '';
       var actionHtml = item.canAct
         ? '<button class="btn small" onclick="openModal(' + item.srNo + ', \'' + item.stageKey + '\')">Mark ' + doneLabel + '</button>'
         : '<span class="pill pending">' + item.status + '</span>';
@@ -1723,12 +1781,14 @@
         selectHtml + '<div class="queue-main">' +
         '<div><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
         '<div class="queue-title">' + escapeHtml(item.materialName) + '</div>' +
+        stageLine +
         approverLine +
         '<div class="queue-sub">Planned: ' + (item.planned || '—') +
           (item.estimatedDeliveryDate ? ' · EDD: ' + item.estimatedDeliveryDate : '') + '</div>' +
         buildMaterialDetailsHtml(item) +
         '</div>' +
-        actionHtml + '</div>';
+        '<div style="display:flex; flex-direction:column; align-items:flex-end;">' + waitingOnHtml + actionHtml + '</div>' +
+      '</div>';
     }
 
     function renderQueue(items) {
@@ -1864,6 +1924,13 @@
       });
       if (!selectedItems.length) return;
       var s = stageCfgByKey(stageKey);
+      // Stages with required extra fields (currently just PO Preparation Stage) collect
+      // those fields ONCE via a modal, then apply them to every selected request —
+      // rather than the plain confirm-and-approve path used for fieldless stages.
+      if (s && s.extra && s.extra.length) {
+        openBulkExtraFieldsModal(stageKey, selectedItems);
+        return;
+      }
       var doneLabel = s.statusValues.done;
       if (!confirm('Mark ' + selectedItems.length + ' selected request' + (selectedItems.length === 1 ? '' : 's') + ' as ' + doneLabel + '?')) return;
 
@@ -2048,10 +2115,10 @@
       if (!q) { out.innerHTML = ''; return; }
       ensureRequestsLoaded(function() {
         var matches = activeRequests(allRequests).filter(function(r) {
-          var v = r.stages.poMaking && r.stages.poMaking.poNo;
+          var v = r.stages.poEntry && r.stages.poEntry.poNo;
           return v && v.toString().toLowerCase().indexOf(q) !== -1;
         });
-        renderLookupResults(out, matches, ['poMaking', 'poEntry', 'poRate']);
+        renderLookupResults(out, matches, ['poEntry', 'poRate']);
       });
     }
 
@@ -2112,21 +2179,59 @@
       }).join('');
     }
 
+    // One search box, matched against Sr No, PO No, Indent No, AND Challan No./Bill No. —
+    // whichever one(s) it matches, the result ALWAYS lands on the Purchase Request page
+    // showing the COMPLETE flow (every stage) for each matching request, never the
+    // restricted/partial lookup view those individual pages' own search boxes show.
     function runGlobalSearch() {
-      var q = document.getElementById('globalSearch').value.trim();
+      var qRaw = document.getElementById('globalSearch').value.trim();
+      // Strip a leading "#" (people copy Sr No straight off the "#1" badge on request cards)
+      // before matching against anything.
+      var q = qRaw.replace(/^#\s*/, '').trim().toLowerCase();
       if (!q) return;
-      navigate('purchaseOrder', document.querySelector('[data-page=purchaseOrder]'));
-      document.getElementById('poSearchInput').value = q;
-      searchByPO();
+      ensureRequestsLoaded(function() {
+        var reqs = activeRequests(allRequests);
+
+        var matches = reqs.filter(function(r) {
+          var srNoStr = (r.srNo !== undefined && r.srNo !== null) ? r.srNo.toString() : '';
+          var poNo = r.stages.poEntry && r.stages.poEntry.poNo;
+          var indentNo = r.stages.indent && r.stages.indent.indentNo;
+          var challanBillNo = r.stages.delivery && r.stages.delivery.challanBillNo;
+          return (srNoStr && srNoStr.toLowerCase() === q) ||
+                 (poNo && poNo.toString().toLowerCase().indexOf(q) !== -1) ||
+                 (indentNo && indentNo.toString().toLowerCase().indexOf(q) !== -1) ||
+                 (challanBillNo && challanBillNo.toString().toLowerCase().indexOf(q) !== -1);
+        });
+
+        purchaseRequestFocusSrNos = matches.length ? matches.map(function(r) { return r.srNo; }) : [];
+        navigate('purchaseRequest', document.querySelector('[data-page=purchaseRequest]'));
+      });
     }
 
     // ---------- Action modal (shared by Approval Flow / Purchase Request / lookups) ----------
     function openModal(srNo, stageKey) {
       var stageDef = stageCfgByKey(stageKey);
       modalCtx = { srNo: srNo, stageKey: stageKey, stageDef: stageDef };
+      bulkModalCtx = null;
       document.getElementById('modalTitle').textContent = 'Mark "' + stageDef.name + '" ' + stageDef.statusValues.done + ' — Request #' + srNo;
+      renderExtraFieldsInto('modalExtraFields', stageDef.extra);
+      document.getElementById('modalMsg').className = 'msg';
+      document.getElementById('modalMsg').textContent = '';
+      document.getElementById('modalConfirmBtn').textContent = 'Confirm ' + stageDef.statusValues.done;
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('open');
+      modalCtx = null;
+      bulkModalCtx = null;
+    }
+
+    /** Builds the extra-field inputs (shared by the single-request modal and the
+     * bulk shared-fields modal) into the given container id. */
+    function renderExtraFieldsInto(containerId, extraDefs) {
       var extraHtml = '';
-      (stageDef.extra || []).forEach(function(ex) {
+      (extraDefs || []).forEach(function(ex) {
         if (ex.key === 'advancePaymentRequired') {
           extraHtml += '<div class="field"><label>' + ex.label + '</label>' +
             '<select id="extra-' + ex.key + '"><option value="">Select...</option><option value="No">No</option><option value="Yes">Yes</option></select></div>';
@@ -2143,27 +2248,43 @@
             '<input type="text" id="extra-' + ex.key + '" placeholder="Enter ' + ex.label + '"></div>';
         }
       });
-      document.getElementById('modalExtraFields').innerHTML = extraHtml;
+      document.getElementById(containerId).innerHTML = extraHtml;
+    }
+
+    /** Opens the shared-fields modal for bulk-approving PO Preparation Stage (or any
+     * other stage that opts into bulk approval despite having extra fields): the
+     * approver fills Vendor Name / PO Amount / PO No / Advance Payment Required ONCE,
+     * and it's applied to every selected request (handy when many requests share the
+     * same PO No). */
+    function openBulkExtraFieldsModal(stageKey, selectedItems) {
+      var stageDef = stageCfgByKey(stageKey);
+      modalCtx = null;
+      bulkModalCtx = { stageKey: stageKey, stageDef: stageDef, items: selectedItems };
+      document.getElementById('modalTitle').textContent =
+        'Mark "' + stageDef.name + '" ' + stageDef.statusValues.done + ' — ' + selectedItems.length + ' selected request' + (selectedItems.length === 1 ? '' : 's');
+      renderExtraFieldsInto('modalExtraFields', stageDef.extra);
       document.getElementById('modalMsg').className = 'msg';
-      document.getElementById('modalMsg').textContent = '';
-      document.getElementById('modalConfirmBtn').textContent = 'Confirm ' + stageDef.statusValues.done;
+      document.getElementById('modalMsg').textContent =
+        'These details will be applied to all ' + selectedItems.length + ' selected request' + (selectedItems.length === 1 ? '' : 's') + '.';
+      document.getElementById('modalConfirmBtn').textContent = 'Confirm ' + stageDef.statusValues.done + ' (' + selectedItems.length + ')';
       document.getElementById('modalOverlay').classList.add('open');
     }
 
-    function closeModal() {
-      document.getElementById('modalOverlay').classList.remove('open');
-      modalCtx = null;
-    }
-
     function confirmAction() {
+      if (bulkModalCtx) { confirmBulkAction(); return; }
       if (!modalCtx) return;
       var extraFields = {};
       var missingRequired = null;
+      // Every field is required on every stage EXCEPT PO Rate Stage (its only field,
+      // Remarks, stays optional there).
+      var fieldsAreRequired = modalCtx.stageKey !== 'poRate';
       (modalCtx.stageDef.extra || []).forEach(function(ex) {
         var el = document.getElementById('extra-' + ex.key);
         if (el) extraFields[ex.key] = el.value.trim ? el.value.trim() : el.value;
-        if (ex.key === 'advancePaymentRequired' && !extraFields[ex.key]) {
-          missingRequired = 'Please select Yes or No for Advance Payment Required.';
+        if (fieldsAreRequired && !extraFields[ex.key] && !missingRequired) {
+          missingRequired = (ex.key === 'advancePaymentRequired')
+            ? 'Please select Yes or No for Advance Payment Required.'
+            : (ex.label + ' is required.');
         }
       });
       if (missingRequired) {
@@ -2193,6 +2314,66 @@
           var m = document.getElementById('modalMsg'); m.className = 'msg error'; m.textContent = err.message || 'Failed.';
         })
         .imsApprovalActOnStage({ srNo: modalCtx.srNo, stageKey: modalCtx.stageKey, extraFields: extraFields, asEmail: testAsEmail || '' });
+    }
+
+    function confirmBulkAction() {
+      if (!bulkModalCtx) return;
+      var stageKey = bulkModalCtx.stageKey;
+      var stageDef = bulkModalCtx.stageDef;
+      var items = bulkModalCtx.items;
+      var extraFields = {};
+      var missingRequired = null;
+      (stageDef.extra || []).forEach(function(ex) {
+        var el = document.getElementById('extra-' + ex.key);
+        if (el) extraFields[ex.key] = el.value.trim ? el.value.trim() : el.value;
+        if (!extraFields[ex.key] && !missingRequired) {
+          missingRequired = (ex.key === 'advancePaymentRequired')
+            ? 'Please select Yes or No for Advance Payment Required.'
+            : (ex.label + ' is required.');
+        }
+      });
+      if (missingRequired) {
+        var m0 = document.getElementById('modalMsg'); m0.className = 'msg error'; m0.textContent = missingRequired;
+        return;
+      }
+      var btn = document.getElementById('modalConfirmBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      var doneLabelForBtn = stageDef.statusValues.done;
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn + ' (' + items.length + ')';
+          var results = (res && res.results) || [];
+          var successful = results.filter(function(r) { return r.success; });
+          if (successful.length) removeManyFromQueueLocally(successful);
+          if (res && (res.success || successful.length)) {
+            closeModal();
+          }
+          loadDashboard();
+          loadQueue();
+          loadRequests();
+
+          var failures = results.filter(function(r) { return !r.success; });
+          if (failures.length) {
+            var lines = failures.slice(0, 5).map(function(r) {
+              return '#' + r.srNo + ': ' + (r.error || 'Failed');
+            });
+            var msgText = successful.length + ' approved. ' + failures.length + ' failed:\n' + lines.join('\n');
+            if (successful.length) {
+              alert(msgText);
+            } else {
+              var m = document.getElementById('modalMsg'); m.className = 'msg error'; m.textContent = msgText;
+            }
+          }
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn + ' (' + items.length + ')';
+          var m = document.getElementById('modalMsg'); m.className = 'msg error'; m.textContent = err.message || 'Failed to approve selected requests.';
+        })
+        .imsApprovalActOnStagesWithSharedFields({
+          items: items.map(function(item) { return { srNo: item.srNo, stageKey: item.stageKey }; }),
+          extraFields: extraFields,
+          asEmail: testAsEmail || ''
+        });
     }
 
     function escapeHtml(str) {

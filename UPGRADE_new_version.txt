@@ -1,0 +1,27 @@
+UPGRADE to the new tracker version (PO Preparation stage + UOM + bulk PO fields)
+================================================================================
+What changed
+  * "PO making" stage is gone. PO Preparation Stage (poEntry) now holds Vendor Name, PO Amount,
+    PO No and Advance Payment Required, and comes right before Rate Approval.
+    Order: Approval, 2nd Approval, WBS, Indent, PO Rate, PO Preparation, Rate Approval,
+           Advance Payment (only if Yes), Delivery, GRN, Truck Entry   (11 stages)
+  * UOM is required on a new entry; it is stored on the request and on Material Quantity Master.
+  * Every extra field is required on every stage except PO Rate (Remarks optional).
+  * New: imsApprovalActOnStagesWithSharedFields (one PO No for many requests), queue shows
+    stage name + "blocked by" stage/approver, locked items stay visible in a user's queue,
+    global search, new page (ApprovalIndex.html / templates/index.html).
+  * Sheet columns for the stage are now "PO Preparation Stage - ..." (old "PO Entry Stage - ..."
+    headers still map). Material Quantity Master is read by header text (UOM column supported).
+
+Steps (in this order)
+  1. Supabase SQL Editor -> paste and Run:  migration_po_preparation_uom.sql   (once)
+  2. Push these files to GitHub (Vercel redeploys by itself):
+       config.py  logic.py  schema.sql  schema_sync.sql  import_masters.py
+       ApprovalIndex.html  templates/index.html  tests/  migration_po_preparation_uom.sql
+  3. Apps Script: replace the contents of  ImsSupabaseSyncLive.gs  and  ImsSupabaseSync.gs
+     with the new versions (both, the first defines a helper the second uses), then
+     menu IMS Sync -> "Rebuild SYNC_MAP from headers". Add a "UOM" column header to the
+     Approval Tracker tab if it is not there yet (the header text must be exactly UOM).
+  4. Run "Pull everything now" once so the sheet refreshes.
+Note: old requests where PO making was still pending are reset to "PO Preparation = Not Approved"
+(they now need PO No and Advance Payment Required there).

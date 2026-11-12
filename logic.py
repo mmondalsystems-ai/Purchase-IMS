@@ -105,22 +105,22 @@ def get_next_stage_key(current_key, advance_required):
     idx = next((i for i, s in enumerate(cfg.STAGE_DEFS) if s["key"] == current_key), -1)
     if idx == -1 or idx == len(cfg.STAGE_DEFS) - 1:
         return None
-    if current_key == "poMaking":
+    if current_key == "rateApproval":
         return "advancePayment" if advance_required == "Yes" else "delivery"
     return cfg.STAGE_DEFS[idx + 1]["key"]
 
 
 def get_prev_stage_key(current_key, advance_required):
     if current_key == "advancePayment":
-        return "poMaking"
+        return "rateApproval"
     if current_key == "delivery":
-        return "advancePayment" if advance_required == "Yes" else "poMaking"
+        return "advancePayment" if advance_required == "Yes" else "rateApproval"
     idx = next((i for i, s in enumerate(cfg.STAGE_DEFS) if s["key"] == current_key), -1)
     if idx <= 0:
         return None
     prev_key = cfg.STAGE_DEFS[idx - 1]["key"]
     if prev_key == "advancePayment":
-        return "poMaking"
+        return "rateApproval"
     return prev_key
 
 
@@ -383,14 +383,14 @@ def imsApprovalGetQtyMasterForProject(project):
         return []
     with db.connection() as conn:
         rows = conn.execute(
-            "select material_status, construction_type, block, lot, material_name, total_qty, remaining "
+            "select construction_type, block, lot, material_name, uom, total_qty, remaining "
             "from ims_qty_master where project = %s order by id",
             (project,),
         ).fetchall()
     return [
         {
-            "materialStatus": r["material_status"], "constructionType": r["construction_type"],
-            "block": r["block"], "lot": r["lot"], "materialName": r["material_name"],
+            "constructionType": r["construction_type"],
+            "block": r["block"], "lot": r["lot"], "materialName": r["material_name"], "uom": r["uom"] or "",
             "totalQty": _num(r["total_qty"]), "remaining": _num(r["remaining"]),
         }
         for r in rows
@@ -445,18 +445,18 @@ def _initialize_stages(conn, sr_no, project, material_type, base_ts, stage_cfg):
     approval_planned = add_days(base_ts, 1)
     rows["approval"]["planned_at"] = approval_planned
     prev_planned = approval_planned
-    po_making_planned = None
+    po_prep_planned = None  # PO Preparation Stage (poEntry): Delivery planned = this + 15 days
     for stage in cfg.STAGE_DEFS[1:]:
         key = stage["key"]
         if key == "advancePayment":
             continue  # set later, only if actually required
         if key == "delivery":
-            planned = add_days(po_making_planned, 15)
+            planned = add_days(po_prep_planned, 15)
         else:
             planned = add_days(prev_planned, 1)
         rows[key]["planned_at"] = planned
-        if key == "poMaking":
-            po_making_planned = planned
+        if key == "poEntry":
+            po_prep_planned = planned
         prev_planned = planned
 
     for key, r in rows.items():
@@ -501,6 +501,9 @@ def imsApprovalSubmitRequest(user, payload):
         quantity = _parse_decimal(payload.get("quantity")) if payload.get("quantity") not in (None, "", 0) else None
         if quantity is None or quantity <= 0:
             raise UserError("Quantity must be a number greater than 0.")
+        uom = str(payload.get("uom") or "").strip()
+        if not uom:
+            raise UserError("UOM is required.")
         entry_status = "Done" if payload.get("entryStatus") == "Done" else "Not Done"
 
         user_email = user or "unknown"
@@ -534,11 +537,11 @@ def imsApprovalSubmitRequest(user, payload):
             ts = now()
             row = conn.execute(
                 "insert into ims_requests (project, planned, construction_type, block, lot, material_name, "
-                "material_type, quantity, estimated_delivery_date, status, entry_status, user_email, remarks, entry_timestamp) "
-                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,'Not Done',%s,%s,%s,%s) returning sr_no",
+                "material_type, uom, quantity, estimated_delivery_date, status, entry_status, user_email, remarks, entry_timestamp) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Not Done',%s,%s,%s,%s) returning sr_no",
                 (project, "Planned" if is_planned else "Non Planned",
                  payload.get("constructionType") or "", payload.get("block") or "", payload.get("lot") or "",
-                 payload["materialName"], payload["materialType"], quantity,
+                 payload["materialName"], payload["materialType"], uom, quantity,
                  _parse_iso_date(payload.get("estimatedDeliveryDate")), entry_status,
                  user_email, payload.get("remarks") or "", ts),
             ).fetchone()
@@ -628,6 +631,7 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             "lot": r["lot"],
             "materialName": r["material_name"],
             "materialType": material_type,
+            "uom": r["uom"] or "",
             "quantity": _num(r["quantity"]),
             "estimatedDeliveryDate": fmt_date(r["estimated_delivery_date"]),
             "overallStatus": r["status"] or "Not Done",
@@ -647,8 +651,7 @@ def _requests_impl(conn, current_user, is_admin, ctx):
 
         po_entry = stage_data.get("poEntry")
         po_amount = (po_entry["extras"].get("poAmount", "") if po_entry else "")
-        po_making = stage_data.get("poMaking")
-        adv_for_gating = (po_making["extras"].get("advancePaymentRequired", "") if po_making else "") or ""
+        adv_for_gating = (po_entry["extras"].get("advancePaymentRequired", "") if po_entry else "") or ""
 
         for stage in cfg.STAGE_DEFS:
             key = stage["key"]
@@ -701,6 +704,27 @@ def imsApprovalGetRequests(user, asEmail=None):
     return _strip_internal(reqs)
 
 
+def _blocking_predecessor(req, stage_key):
+    """Earliest not-Done stage in the chain behind stage_key (same chain the real gating uses)."""
+    sd = req["stages"].get(stage_key)
+    if not sd or sd["status"] == status_values(stage_key)["done"]:
+        return None
+    adv = (req["stages"].get("poEntry") or {}).get("advancePaymentRequired")
+    earliest, key = None, stage_key
+    for _ in range(len(cfg.STAGE_DEFS)):
+        prev_key = get_prev_stage_key(key, adv)
+        if not prev_key:
+            break
+        prev = req["stages"].get(prev_key)
+        if not prev or prev["status"] != status_values(prev_key)["done"]:
+            earliest = prev_key
+        key = prev_key
+    if not earliest:
+        return None
+    prev = req["stages"].get(earliest)
+    return {"key": earliest, "name": STAGE_BY_KEY[earliest]["name"], "approver": prev["approver"] if prev else ""}
+
+
 def imsApprovalGetMyQueue(user, asEmail=None):
     _, _, current, is_admin = _identity(user, asEmail)
     with db.connection() as conn:
@@ -716,26 +740,32 @@ def imsApprovalGetMyQueue(user, asEmail=None):
             if not sd:
                 continue
             if stage["key"] == "advancePayment":
-                if (req["stages"].get("poMaking") or {}).get("advancePaymentRequired") != "Yes":
+                if (req["stages"].get("poEntry") or {}).get("advancePaymentRequired") != "Yes":
                     continue
             done_label = status_values(stage["key"])["done"]
             pending_and_unlocked = sd["status"] != done_label and bool(sd["approver"])
-            include = pending_and_unlocked if is_admin else sd["canCurrentUserAct"]
+            # Admins: every pending, unlocked stage. Everyone else: every stage assigned to them that is
+            # not done yet, even while still locked behind an earlier stage (canAct stays gated separately).
+            include = pending_and_unlocked if is_admin else (sd["isMyStage"] and sd["status"] != done_label)
             if not include:
                 continue
+            blocker = _blocking_predecessor(req, stage["key"])
             st = req["stages"]
             queue.append({
                 "srNo": req["srNo"], "project": req["project"], "planType": req["planned"],
                 "materialName": req["materialName"], "materialType": req["materialType"],
                 "constructionType": req["constructionType"], "block": req["block"], "lot": req["lot"],
-                "quantity": req["quantity"], "remarks": req["remarks"], "requestedBy": req["userEmail"],
+                "uom": req["uom"], "quantity": req["quantity"], "remarks": req["remarks"], "requestedBy": req["userEmail"],
                 "entryTimestamp": req["entryTimestamp"], "estimatedDeliveryDate": req["estimatedDeliveryDate"],
                 "indentNo": st["indent"]["indentNo"] if "indent" in st else "",
                 "vendorName": st["poEntry"]["vendorName"] if "poEntry" in st else "",
                 "poAmount": st["poEntry"]["poAmount"] if "poEntry" in st else "",
-                "poNo": st["poMaking"]["poNo"] if "poMaking" in st else "",
+                "poNo": st["poEntry"]["poNo"] if "poEntry" in st else "",
                 "challanBillNo": st["delivery"]["challanBillNo"] if "delivery" in st else "",
                 "stageKey": stage["key"], "stageName": stage["name"],
+                "blockedByStageKey": blocker["key"] if blocker else "",
+                "blockedByStageName": blocker["name"] if blocker else "",
+                "blockedByApprover": blocker["approver"] if blocker else "",
                 "planned": sd["planned"], "status": sd["status"], "approver": sd["approver"],
                 "canAct": sd["canCurrentUserAct"],
                 "_plannedDt": sd["_plannedDt"],
@@ -831,8 +861,7 @@ def _act_on_stage(user, payload):
             if current != approver_email:
                 raise UserError('You are not the assigned approver for "' + stage_def["name"] + '" (assigned: ' + approver_name + ").")
 
-        po_making = stages.get("poMaking")
-        adv_req = (po_making["extras"].get("advancePaymentRequired", "") if po_making else "") or ""
+        adv_req = (po_entry["extras"].get("advancePaymentRequired", "") if po_entry else "") or ""
         if stage_key == "advancePayment" and adv_req != "Yes":
             raise UserError("Advance Payment Stage is not applicable for this request.")
 
@@ -848,10 +877,17 @@ def _act_on_stage(user, payload):
         if this["status"] == sv["done"]:
             raise UserError("This stage is already marked " + sv["done"] + ".")
 
-        if stage_key == "poMaking":
+        if stage_key == "poEntry":
             adv_val = extra_fields.get("advancePaymentRequired")
             if adv_val not in ("Yes", "No"):
                 raise UserError("Advance Payment Required must be explicitly set to Yes or No.")
+
+        # Every extra field is required on every stage EXCEPT PO Rate Stage (its Remarks stays optional).
+        if stage_key != "poRate":
+            for ex in stage_def.get("extra", []):
+                val = extra_fields.get(ex["key"])
+                if val is None or str(val).strip() == "":
+                    raise UserError(ex["label"] + " is required.")
 
         ts = now()
         planned_val = this["planned_at"]
@@ -882,8 +918,11 @@ def _act_on_stage(user, payload):
                 )
 
         adv_now = adv_req
-        if stage_key == "poMaking" and extra_fields.get("advancePaymentRequired"):
+        if stage_key == "poEntry" and extra_fields.get("advancePaymentRequired"):
             adv_now = extra_fields["advancePaymentRequired"]
+        # Advance Payment sits right after Rate Approval; whether it is needed was fixed at PO Preparation.
+        # Once Rate Approval itself is completed, set Advance Payment's planned date (its planned + 1).
+        if stage_key == "rateApproval":
             if adv_now == "Yes":
                 adv_planned = add_days(planned_val, 1) if planned_val else add_days(ts, 1)
                 conn.execute(
@@ -912,7 +951,7 @@ def imsApprovalActOnStage(user, payload):
         return {"success": False, "error": "Server error while saving. Please try again."}
 
 
-def imsApprovalActOnStages(user, payload):
+def _act_on_many(user, payload, shared_fields):
     items = (payload or {}).get("items") or []
     if not items:
         return {"success": False, "successCount": 0, "failureCount": 0, "results": [], "error": "No requests selected."}
@@ -932,7 +971,7 @@ def imsApprovalActOnStages(user, payload):
         if key in seen:
             continue
         seen.add(key)
-        res = imsApprovalActOnStage(user, {"srNo": sr_no, "stageKey": stage_key, "extraFields": {},
+        res = imsApprovalActOnStage(user, {"srNo": sr_no, "stageKey": stage_key, "extraFields": dict(shared_fields),
                                            "asEmail": payload.get("asEmail") or ""})
         result["success"] = bool(res and res.get("success"))
         if not result["success"]:
@@ -940,6 +979,15 @@ def imsApprovalActOnStages(user, payload):
         results.append(result)
     ok = sum(1 for r in results if r["success"])
     return {"success": ok == len(results), "successCount": ok, "failureCount": len(results) - ok, "results": results}
+
+
+def imsApprovalActOnStages(user, payload):
+    return _act_on_many(user, payload, {})
+
+
+def imsApprovalActOnStagesWithSharedFields(user, payload):
+    """Same batch, but ONE shared extraFields object (vendor / PO amount / PO no / advance) for every item."""
+    return _act_on_many(user, payload, (payload or {}).get("extraFields") or {})
 
 
 # ---------------------------------------------------------------------------
@@ -1019,5 +1067,6 @@ API = {
     "imsApprovalGetMyStageKeys": (imsApprovalGetMyStageKeys, True),
     "imsApprovalActOnStage": (imsApprovalActOnStage, True),
     "imsApprovalActOnStages": (imsApprovalActOnStages, True),
+    "imsApprovalActOnStagesWithSharedFields": (imsApprovalActOnStagesWithSharedFields, True),
     "imsApprovalCancelRequest": (imsApprovalCancelRequest, True),
 }

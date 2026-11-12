@@ -96,17 +96,38 @@ def build_access_control(wb):
 
 
 def build_qty_master(wb):
+    """Columns are found by header text, so both the old layout (with Material Status)
+    and the new one (UOM, no Material Status) import correctly."""
+    rows = rows_of(wb, "Material Quantity Master")
+    if not rows:
+        return []
+    header = [text(h).lower() for h in rows[0]]
+
+    def col(*names):
+        for n in names:
+            if n.lower() in header:
+                return header.index(n.lower())
+        return -1
+
+    c = {"status": col("Material Status"), "ctype": col("Construction Type"), "block": col("Block"),
+         "lot": col("LOT"), "material": col("Material Name"), "uom": col("UOM"),
+         "total": col("Total Qty (Fixed)", "Total Qty"), "remaining": col("Remaining"), "project": col("Project")}
+
+    def get(r, key):
+        i = c[key]
+        return r[i] if 0 <= i < len(r) else None
+
     out, seen = [], {}
-    for r in rows_of(wb, "Material Quantity Master")[1:]:
-        r = (r + [None] * 8)[:8]
-        material, project = text(r[4]), text(r[7])
+    for r in rows[1:]:
+        material, project = text(get(r, "material")), text(get(r, "project"))
         if not material and not project:
             continue  # fully blank row
-        combo = (project, text(r[1]), text(r[2]), text(r[3]), material)
+        combo = (project, text(get(r, "ctype")), text(get(r, "block")), text(get(r, "lot")), material)
         seen[combo] = seen.get(combo, 0) + 1
         out.append({
-            "material_status": text(r[0]), "construction_type": combo[1], "block": combo[2], "lot": combo[3],
-            "material_name": material, "total_qty": number(r[5]), "remaining": number(r[6]),
+            "material_status": text(get(r, "status")), "construction_type": combo[1], "block": combo[2], "lot": combo[3],
+            "material_name": material, "uom": text(get(r, "uom")),
+            "total_qty": number(get(r, "total")), "remaining": number(get(r, "remaining")),
             "project": project, "dup_no": seen[combo],
         })
     return out

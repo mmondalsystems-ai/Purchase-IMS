@@ -69,6 +69,7 @@ create table if not exists ims_qty_master (
   block             text not null default '',
   lot               text not null default '',
   material_name     text not null default '',
+  uom               text not null default '',
   total_qty         numeric,
   remaining         numeric,
   project           text not null default '',
@@ -92,6 +93,7 @@ create table if not exists ims_requests (
   lot                   text not null default '',
   material_name         text not null,
   material_type         text not null,
+  uom                   text not null default '',
   quantity              numeric not null,
   estimated_delivery_date date,
   status                text not null default 'Not Done',
@@ -109,8 +111,7 @@ create index if not exists ims_requests_project_idx on ims_requests (project);
 -- One row per request per stage (the stage columns of the old wide sheet).
 -- extras holds the stage specific fields, for example
 --   indent       -> {"indentNo": "..."}
---   poEntry      -> {"vendorName": "...", "poAmount": 12000}
---   poMaking     -> {"poNo": "...", "advancePaymentRequired": "Yes"}
+--   poEntry      -> {"vendorName": "...", "poAmount": 12000, "poNo": "...", "advancePaymentRequired": "Yes"}
 --   delivery     -> {"challanBillNo": "..."}
 create table if not exists ims_request_stages (
   sr_no       integer not null references ims_requests (sr_no) on delete cascade,
@@ -150,7 +151,7 @@ alter table ims_request_stages  enable row level security;
 --   stage_config   [{stage_key, project, approver}]
 --   access_control [{access_types, projects, stage_keys, notes, names_emails}]
 --   qty_master     [{material_status, construction_type, block, lot,
---                    material_name, total_qty, remaining, project, dup_no}]
+--                    material_name, uom, total_qty, remaining, project, dup_no}]
 --
 -- Rules
 --   * people, stage_config      : upsert (the sheet value wins)
@@ -231,13 +232,14 @@ begin
 
   if p ? 'qty_master' then
     insert into ims_qty_master
-      (material_status, construction_type, block, lot, material_name,
+      (material_status, construction_type, block, lot, material_name, uom,
        total_qty, remaining, project, dup_no)
     select coalesce(t.x ->> 'material_status', ''),
            coalesce(t.x ->> 'construction_type', ''),
            coalesce(t.x ->> 'block', ''),
            coalesce(t.x ->> 'lot', ''),
            coalesce(t.x ->> 'material_name', ''),
+           coalesce(t.x ->> 'uom', ''),
            nullif(t.x ->> 'total_qty', '')::numeric,
            nullif(t.x ->> 'remaining', '')::numeric,
            coalesce(t.x ->> 'project', ''),
@@ -247,6 +249,7 @@ begin
     on conflict (project, construction_type, block, lot, material_name, dup_no)
     do update set
       material_status = excluded.material_status,
+      uom             = excluded.uom,
       total_qty       = excluded.total_qty,
       remaining       = case when overwrite_remaining then excluded.remaining
                              else ims_qty_master.remaining end;

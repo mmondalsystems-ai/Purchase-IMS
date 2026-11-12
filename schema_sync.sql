@@ -13,13 +13,13 @@
 --
 -- Flat key names (these are the keys used in the SYNC_MAP tab of the sheet)
 --   Request level : sr_no, project, planned, construction_type, block, lot,
---                   material_name, material_type, quantity, estimated_delivery_date,
+--                   material_name, material_type, uom, quantity, estimated_delivery_date,
 --                   status, entry_status, cancelled, cancelled_by, cancelled_at,
 --                   cancel_reason, user_email, remarks, entry_timestamp
 --   Stage level   : <stage_key>_approver, <stage_key>_planned_at, <stage_key>_actual_at,
 --                   <stage_key>_delay_days, <stage_key>_status, <stage_key>_approved_by
 --   Stage extras  : <stage_key>_<extra key>, for example indent_indentNo,
---                   poEntry_vendorName, poEntry_poAmount, poMaking_poNo
+--                   poEntry_vendorName, poEntry_poAmount, poEntry_poNo
 --
 -- Timestamps are exchanged as 'YYYY-MM-DD HH24:MI:SS' in Asia/Kolkata time.
 -- ============================================================================
@@ -84,6 +84,7 @@ language sql stable as $$
            'lot', r.lot,
            'material_name', r.material_name,
            'material_type', r.material_type,
+           'uom', r.uom,
            'quantity', r.quantity,
            'estimated_delivery_date', to_char(r.estimated_delivery_date, 'YYYY-MM-DD'),
            'status', r.status,
@@ -196,7 +197,7 @@ create or replace function ims_push_row(p_sr_no integer, p_changes jsonb) return
 language plpgsql as $$
 declare
   c_req_cols  constant text[] := array[
-    'project','planned','construction_type','block','lot','material_name','material_type',
+    'project','planned','construction_type','block','lot','material_name','material_type','uom',
     'quantity','estimated_delivery_date','status','entry_status','cancelled','cancelled_by',
     'cancelled_at','cancel_reason','user_email','remarks','entry_timestamp'];
   c_nontext   constant text[] := array[

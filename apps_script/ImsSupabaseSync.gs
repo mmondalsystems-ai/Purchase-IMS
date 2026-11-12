@@ -173,23 +173,27 @@ function ImsSupabaseSync_buildAccessControl_() {
 function ImsSupabaseSync_buildQtyMaster_() {
   var rows = ImsSupabaseSync_values_('Material Quantity Master');
   var out = [];
+  if (!rows.length) return out;
+  var c = ImsSupabaseSync_qtyCols_(rows[0]); // columns found by header text
+  var g = function (r, k) { return c[k] >= 0 ? r[c[k]] : ''; };
   var seen = {};
   for (var i = 1; i < rows.length; i++) {
     var r = rows[i];
-    var material = ImsSupabaseSync_text_(r[4]);
-    var project = ImsSupabaseSync_text_(r[7]);
+    var material = ImsSupabaseSync_text_(g(r, 'material'));
+    var project = ImsSupabaseSync_text_(g(r, 'project'));
     if (!material && !project) continue; // fully blank row
-    var combo = [project, ImsSupabaseSync_text_(r[1]), ImsSupabaseSync_text_(r[2]),
-                 ImsSupabaseSync_text_(r[3]), material].join('\u0001');
+    var combo = [project, ImsSupabaseSync_text_(g(r, 'ctype')), ImsSupabaseSync_text_(g(r, 'block')),
+                 ImsSupabaseSync_text_(g(r, 'lot')), material].join('\u0001');
     seen[combo] = (seen[combo] || 0) + 1;
     out.push({
-      material_status: ImsSupabaseSync_text_(r[0]),
-      construction_type: ImsSupabaseSync_text_(r[1]),
-      block: ImsSupabaseSync_text_(r[2]),
-      lot: ImsSupabaseSync_text_(r[3]),
+      material_status: ImsSupabaseSync_text_(g(r, 'status')),
+      construction_type: ImsSupabaseSync_text_(g(r, 'ctype')),
+      block: ImsSupabaseSync_text_(g(r, 'block')),
+      lot: ImsSupabaseSync_text_(g(r, 'lot')),
       material_name: material,
-      total_qty: ImsSupabaseSync_number_(r[5]),
-      remaining: ImsSupabaseSync_number_(r[6]),
+      uom: ImsSupabaseSync_text_(g(r, 'uom')),
+      total_qty: ImsSupabaseSync_number_(g(r, 'total')),
+      remaining: ImsSupabaseSync_number_(g(r, 'remaining')),
       project: project,
       dup_no: seen[combo]
     });
