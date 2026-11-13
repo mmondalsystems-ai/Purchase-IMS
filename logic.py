@@ -761,6 +761,7 @@ def imsApprovalGetMyQueue(user, asEmail=None):
                 "vendorName": st["poEntry"]["vendorName"] if "poEntry" in st else "",
                 "poAmount": st["poEntry"]["poAmount"] if "poEntry" in st else "",
                 "poNo": st["poEntry"]["poNo"] if "poEntry" in st else "",
+                "paymentTerms": st["poEntry"]["paymentTerms"] if "poEntry" in st else "",
                 "challanBillNo": st["delivery"]["challanBillNo"] if "delivery" in st else "",
                 "stageKey": stage["key"], "stageName": stage["name"],
                 "blockedByStageKey": blocker["key"] if blocker else "",

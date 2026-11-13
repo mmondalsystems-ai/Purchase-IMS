@@ -47,7 +47,7 @@ var ImsSupabaseSync_STAGE_KEYS = [
 var ImsSupabaseSync_STAGE_FIELDS = ['approver', 'planned_at', 'actual_at', 'delay_days', 'status', 'approved_by'];
 var ImsSupabaseSync_EXTRA_KEYS = [
   'indent_indentNo', 'poRate_remarks', 'poEntry_vendorName', 'poEntry_poAmount',
-  'poEntry_poNo', 'poEntry_advancePaymentRequired', 'delivery_challanBillNo'
+  'poEntry_poNo', 'poEntry_paymentTerms', 'poEntry_advancePaymentRequired', 'delivery_challanBillNo'
 ];
 
 // Header text (normalised: lower case, letters and digits only) -> key, for auto matching.
@@ -504,6 +504,7 @@ function ImsSupabaseSync_stageAliases_() {
     poEntry_vendorName: 'PO Preparation Stage - Vendor Name',
     poEntry_poAmount: 'PO Preparation Stage - PO Amount',
     poEntry_poNo: 'PO Preparation Stage - PO No',
+    poEntry_paymentTerms: 'PO Preparation Stage - Payment Terms',
     poEntry_advancePaymentRequired: 'PO Preparation Stage - Advance Payment Required',
     delivery_challanBillNo: 'Delivery Stage - Challan No./Bill No.'
   };

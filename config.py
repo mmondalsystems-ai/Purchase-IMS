@@ -32,6 +32,7 @@ STAGE_DEFS = [
          {"key": "vendorName", "label": "Vendor Name", "dropdown": "vendor"},
          {"key": "poAmount", "label": "PO Amount"},
          {"key": "poNo", "label": "PO No"},
+         {"key": "paymentTerms", "label": "Payment Terms"},
          {"key": "advancePaymentRequired", "label": "Advance Payment Required"},
      ]},
     {"key": "rateApproval", "name": "Rate Approval Stage", "computedApprover": True},

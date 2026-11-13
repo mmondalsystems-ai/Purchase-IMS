@@ -119,7 +119,7 @@ def main():
     extras_for = {
         "indent": {"indentNo": "IND-001"},
         "poRate": {"remarks": "rate ok"},
-        "poEntry": {"vendorName": call(admin, "imsApprovalGetVendors")[0], "poAmount": "75000", "poNo": "PO-77",
+        "poEntry": {"vendorName": call(admin, "imsApprovalGetVendors")[0], "poAmount": "75000", "poNo": "PO-77", "paymentTerms": "30 days",
                     "advancePaymentRequired": "Yes"},
         "delivery": {"challanBillNo": "CH-9"},
     }
@@ -166,7 +166,7 @@ def main():
             check(not blocked["success"], "Advance Payment cannot be approved when not required")
             continue
         ex = {"indent": {"indentNo": "I-2"}, "delivery": {"challanBillNo": "C-2"},
-              "poEntry": {"vendorName": "ABC", "poAmount": "120000", "poNo": "PO-78", "advancePaymentRequired": "No"}}.get(key, {})
+              "poEntry": {"vendorName": "ABC", "poAmount": "120000", "poNo": "PO-78", "paymentTerms": "30 days", "advancePaymentRequired": "No"}}.get(key, {})
         res = call(admin, "imsApprovalActOnStage", {"srNo": sr2, "stageKey": key, "extraFields": ex})
         check(res["success"], "admin approves %s" % key)
     r2 = next(x for x in call(admin, "imsApprovalGetRequests") if x["srNo"] == sr2)
@@ -187,10 +187,13 @@ def main():
                     "extraFields": {"vendorName": "ABC", "poAmount": "1000", "poNo": "X"}})
     check(not nochoice["success"] and "Yes or No" in nochoice["error"], "Advance Payment Required must be chosen")
     nopo = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "poEntry",
-                "extraFields": {"vendorName": "ABC", "poAmount": "1000", "advancePaymentRequired": "No"}})
+                "extraFields": {"vendorName": "ABC", "poAmount": "1000", "paymentTerms": "Net 30", "advancePaymentRequired": "No"}})
     check(not nopo["success"] and "PO No is required" in nopo["error"], "every PO Preparation field is required")
+    notr = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "poEntry",
+                "extraFields": {"vendorName": "ABC", "poAmount": "1000", "poNo": "P3", "advancePaymentRequired": "No"}})
+    check(not notr["success"] and "Payment Terms is required" in notr["error"], "Payment Terms is required")
     check(call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "poEntry", "extraFields":
-          {"vendorName": "ABC", "poAmount": "1000", "poNo": "P3", "advancePaymentRequired": "No"}})["success"], "sr3 poEntry")
+          {"vendorName": "ABC", "poAmount": "1000", "poNo": "P3", "paymentTerms": "Net 30", "advancePaymentRequired": "No"}})["success"], "sr3 poEntry")
     check(call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "rateApproval", "extraFields": {}})["success"], "sr3 rateApproval")
     out_of_order = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "grn", "extraFields": {}})
     check(not out_of_order["success"] and "Previous stage" in out_of_order["error"], "stages cannot be skipped")
@@ -216,7 +219,7 @@ def main():
                  "extraFields": {"indentNo": "SHARED-1"} if key == "indent" else {}})
         check(r["success"] and r["successCount"] == 3, "shared batch %s" % key)
     r = call(admin, "imsApprovalActOnStagesWithSharedFields", {"items": [{"srNo": i, "stageKey": "poEntry"} for i in sh],
-             "extraFields": {"vendorName": "ABC", "poAmount": "40000", "poNo": "SHARED-PO", "advancePaymentRequired": "No"}})
+             "extraFields": {"vendorName": "ABC", "poAmount": "40000", "poNo": "SHARED-PO", "paymentTerms": "Net 30", "advancePaymentRequired": "No"}})
     check(r["success"] and r["successCount"] == 3, "one PO No applied to 3 requests")
     got = [x for x in call(admin, "imsApprovalGetRequests") if x["srNo"] in sh]
     check(all(g["stages"]["poEntry"]["poNo"] == "SHARED-PO" for g in got), "shared PO No stored on each request")
