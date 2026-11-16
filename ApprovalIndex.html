@@ -844,7 +844,7 @@
 
             <div class="field">
               <label>Task Name</label>
-              <input type="text" id="f-taskname" placeholder="Enter task name" autocomplete="off">
+              <select id="f-taskname"><option value="">Select task...</option></select>
             </div>
             <div class="field">
               <label>Point of Uses</label>
@@ -1005,6 +1005,7 @@
     var purchaseRequestFocusSrNos = null;
     var vendorsCache = [];
     var materialsCache = [];
+    var tasksCache = [];
     var qtyMasterCache = []; // Material Quantity Master rows, scoped to the currently selected project
     // Fixed UOM options offered for Non Planned entries (Planned entries auto-fill UOM from
     // Material Quantity Master instead). Sourced from the UOM values actually in use across
@@ -1095,6 +1096,11 @@
       google.script.run.withSuccessHandler(function(materials) {
         materialsCache = materials;
       }).imsApprovalGetMaterials();
+
+      google.script.run.withSuccessHandler(function(tasks) {
+        tasksCache = tasks || [];
+        populateTaskOptions();
+      }).imsApprovalGetTasks();
 
       google.script.run.withSuccessHandler(function(vendors) {
         vendorsCache = vendors;
@@ -1381,7 +1387,7 @@
       syncFromSelect();
     }
 
-    function initSearchableMaterialBoxes() { makeSearchable('f-material'); makeSearchable('f-material-manual'); }
+    function initSearchableMaterialBoxes() { makeSearchable('f-material'); makeSearchable('f-material-manual'); makeSearchable('f-taskname'); }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSearchableMaterialBoxes);
     else initSearchableMaterialBoxes();
 
@@ -1394,6 +1400,14 @@
       document.getElementById('manualFieldsGroup').style.display = 'none';
       resetCascadingFields();
       resetManualFields();
+    }
+
+    function populateTaskOptions() {
+      var sel = document.getElementById('f-taskname');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">' + (tasksCache.length ? 'Select task...' : 'No tasks in Task Master') + '</option>' +
+        tasksCache.map(function(t) { return '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>'; }).join('');
+      sel.value = '';
     }
 
     function resetManualFields() {
@@ -1578,9 +1592,9 @@
             document.getElementById('f-project').value = '';
             document.getElementById('f-materialtype').value = '';
             resetAllEntryFields();
+            populateTaskOptions();
             document.getElementById('f-edd').value = '';
             document.getElementById('f-remarks').value = '';
-            document.getElementById('f-taskname').value = '';
             document.getElementById('f-pointofuses').value = '';
             document.getElementById('f-entrystatus').value = '';
             var firstEntryChip = document.querySelector('#f-entrystatus-chips .chip');

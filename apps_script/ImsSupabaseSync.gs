@@ -5,7 +5,7 @@
  * spreadsheet. It copies the MASTER tabs into Supabase so the Python web app sees every
  * change you make in the sheet:
  *
- *     People, Vendor Master, Material Master, Stage Config, Access Control,
+ *     People, Vendor Master, Material Master, Task Master, Stage Config, Access Control,
  *     Material Quantity Master
  *
  * It never touches "Approval Tracker" - requests now live only in Supabase.
@@ -45,6 +45,7 @@ function ImsSupabaseSync_run_(overwriteRemaining) {
     people: ImsSupabaseSync_buildPeople_(),
     vendors: ImsSupabaseSync_buildSingleColumn_('Vendor Master'),
     materials: ImsSupabaseSync_buildSingleColumn_('Material Master'),
+    tasks: ImsSupabaseSync_buildTasks_(),
     stage_config: ImsSupabaseSync_buildStageConfig_(),
     access_control: ImsSupabaseSync_buildAccessControl_()
   };
@@ -133,6 +134,22 @@ function ImsSupabaseSync_buildSingleColumn_(sheetName) {
   for (var i = 1; i < rows.length; i++) {
     var v = ImsSupabaseSync_text_(rows[i][0]);
     if (v) out.push(v);
+  }
+  return out;
+}
+
+/** Task Master tab, column A. Row 1 is skipped only when it looks like a header. A missing tab sends nothing. */
+function ImsSupabaseSync_buildTasks_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Task Master');
+  if (!sheet || sheet.getLastRow() < 1) return [];
+  var headerWords = ['task name', 'task names', 'task', 'tasks', 'task master', 'name'];
+  var rows = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var v = ImsSupabaseSync_text_(rows[i][0]);
+    if (!v) continue;
+    if (i === 0 && headerWords.indexOf(v.toLowerCase()) !== -1) continue;
+    out.push(v);
   }
   return out;
 }

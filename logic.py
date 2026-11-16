@@ -378,6 +378,12 @@ def imsApprovalGetMaterials():
     return sorted(r["name"] for r in rows if r["name"])
 
 
+def imsApprovalGetTasks():
+    with db.connection() as conn:
+        rows = conn.execute("select name from ims_tasks").fetchall()
+    return sorted(r["name"] for r in rows if r["name"])
+
+
 def imsApprovalGetQtyMasterForProject(project):
     if not project:
         return []
@@ -511,6 +517,12 @@ def imsApprovalSubmitRequest(user, payload):
         project = payload["project"]
 
         with db.connection() as conn:
+            task_name = str(payload.get("taskName") or "").strip()
+            if task_name:
+                found = conn.execute("select name from ims_tasks where lower(name) = lower(%s)", (task_name,)).fetchone()
+                if not found:
+                    raise UserError("Task Name must be chosen from the Task Master list.")
+                task_name = found["name"]
             ctx = _load_context(conn)
             if user_lower not in cfg.ADMIN_EMAILS:
                 allowed = get_access_emails(cfg.ACCESS_TYPES["newEntry"], project, "ALL", ctx["access"], ctx["people"])
@@ -542,7 +554,7 @@ def imsApprovalSubmitRequest(user, payload):
                 (project, "Planned" if is_planned else "Non Planned",
                  payload.get("constructionType") or "", payload.get("block") or "", payload.get("lot") or "",
                  payload["materialName"], payload["materialType"],
-                 str(payload.get("taskName") or "").strip(), str(payload.get("pointOfUses") or "").strip(), uom, quantity,
+                 task_name, str(payload.get("pointOfUses") or "").strip(), uom, quantity,
                  _parse_iso_date(payload.get("estimatedDeliveryDate")), entry_status,
                  user_email, payload.get("remarks") or "", ts),
             ).fetchone()
@@ -1061,6 +1073,7 @@ API = {
     "imsApprovalGetMaterialTypesForClient": (imsApprovalGetMaterialTypesForClient, False),
     "imsApprovalGetVendors": (imsApprovalGetVendors, False),
     "imsApprovalGetMaterials": (imsApprovalGetMaterials, False),
+    "imsApprovalGetTasks": (imsApprovalGetTasks, False),
     "imsApprovalGetQtyMasterForProject": (imsApprovalGetQtyMasterForProject, False),
     "imsApprovalGetCurrentUserEmail": (imsApprovalGetCurrentUserEmail, True),
     "imsApprovalGetCurrentUserInfo": (imsApprovalGetCurrentUserInfo, True),

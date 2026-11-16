@@ -94,6 +94,9 @@ def main():
     check(res["success"] and res["qtySynced"] and res["remainingAfter"] == 0, "Planned submit deducts whole Remaining -> 0")
     sr1 = res["srNo"]
     got_tp = [g for g in call(admin, "imsApprovalGetRequests") if g["srNo"] == sr1][0]
+    badtask = call(admin, "imsApprovalSubmitRequest", dict(payload, taskName="Not In Master", quantity=1))
+    check(not badtask["success"] and "Task Master" in badtask["error"], "Task Name outside Task Master is rejected")
+    check("Smoke Task" in call(admin, "imsApprovalGetTasks"), "Task Master list is returned")
     check(got_tp["taskName"] == "Smoke Task" and got_tp["pointOfUses"] == "Tower 2 Floor 3", "Task Name and Point of Uses are saved and returned")
     res2 = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=1))
     check(not res2["success"] and "more than the Remaining" in res2["error"], "second submit is rejected (nothing remaining)")

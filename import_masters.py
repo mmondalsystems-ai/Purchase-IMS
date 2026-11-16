@@ -7,7 +7,7 @@ One-time (or repeatable) import of the master tabs from the downloaded Google Sh
     python import_masters.py Purchase_IMS_Backend.xlsx --only people,stage_config
 
 Tabs imported:
-    People, Vendor Master, Material Master, Stage Config, Access Control,
+    People, Vendor Master, Material Master, Task Master, Stage Config, Access Control,
     Material Quantity Master
 The "Approval Tracker" tab is NOT imported (it is empty / transactional data).
 
@@ -30,7 +30,7 @@ from psycopg.types.json import Jsonb
 
 BASE_DIR = Path(__file__).resolve().parent
 QTY_CHUNK = 2000
-ALL_PARTS = ["people", "vendors", "materials", "stage_config", "access_control", "qty_master"]
+ALL_PARTS = ["people", "vendors", "materials", "tasks", "stage_config", "access_control", "qty_master"]
 
 
 def text(value) -> str:
@@ -65,6 +65,25 @@ def build_people(wb):
 
 def build_single_column(wb, name):
     return [text(r[0]) for r in rows_of(wb, name)[1:] if text(r[0])]
+
+
+TASK_HEADERS = {"task name", "task names", "task", "tasks", "task master", "name"}
+
+
+def build_tasks(wb):
+    """Task Master tab, column A. The first row is skipped only if it looks like a header.
+    A missing tab is not an error (nothing is imported)."""
+    if "Task Master" not in wb.sheetnames:
+        print("  (no 'Task Master' tab found - skipped)")
+        return []
+    rows = rows_of(wb, "Task Master")
+    out = []
+    for i, r in enumerate(rows):
+        v = text(r[0] if r else "")
+        if not v or (i == 0 and v.lower() in TASK_HEADERS):
+            continue
+        out.append(v)
+    return out
 
 
 def build_stage_config(wb):
@@ -156,6 +175,7 @@ def main():
         "people": lambda: build_people(wb),
         "vendors": lambda: build_single_column(wb, "Vendor Master"),
         "materials": lambda: build_single_column(wb, "Material Master"),
+        "tasks": lambda: build_tasks(wb),
         "stage_config": lambda: build_stage_config(wb),
         "access_control": lambda: build_access_control(wb),
     }

@@ -43,6 +43,8 @@ with db.connection() as conn:
         conn.execute("insert into ims_vendors (name) values (%s) on conflict do nothing", (v,))
     for m in ("CEMENT", "SAND", "BRICK", "TMT", "PAINT"):
         conn.execute("insert into ims_materials (name) values (%s) on conflict do nothing", (m,))
+    for t in ("Smoke Task", "Plumbing Work"):
+        conn.execute("insert into ims_tasks (name) values (%s) on conflict do nothing", (t,))
     n = 0
     for i in range(1, 30):
         conn.execute("insert into ims_qty_master (construction_type, block, lot, material_name, uom, total_qty, remaining, project, dup_no) "

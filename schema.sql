@@ -37,6 +37,12 @@ create table if not exists ims_materials (
   added_on timestamptz not null default now()
 );
 
+-- Sheet tab: Task Master  (column A = Task Name; suggestion list for the Task Name field)
+create table if not exists ims_tasks (
+  name     text primary key,
+  added_on timestamptz not null default now()
+);
+
 -- Sheet tab: Stage Config  (one row per stage + project -> approver name)
 create table if not exists ims_stage_config (
   stage_key text not null,
@@ -134,6 +140,7 @@ create table if not exists ims_request_stages (
 alter table ims_people          enable row level security;
 alter table ims_vendors         enable row level security;
 alter table ims_materials       enable row level security;
+alter table ims_tasks           enable row level security;
 alter table ims_stage_config    enable row level security;
 alter table ims_access_control  enable row level security;
 alter table ims_qty_master      enable row level security;
@@ -150,6 +157,7 @@ alter table ims_request_stages  enable row level security;
 --   people         [{name, email}]
 --   vendors        ["Vendor A", ...]
 --   materials      ["Material A", ...]
+--   tasks          ["Task A", ...]
 --   stage_config   [{stage_key, project, approver}]
 --   access_control [{access_types, projects, stage_keys, notes, names_emails}]
 --   qty_master     [{material_status, construction_type, block, lot,
@@ -172,6 +180,7 @@ declare
   n_people    integer := 0;
   n_vendors   integer := 0;
   n_materials integer := 0;
+  n_tasks     integer := 0;
   n_stage     integer := 0;
   n_access    integer := 0;
   n_qty       integer := 0;
@@ -204,6 +213,15 @@ begin
     where btrim(v) <> ''
     on conflict (name) do nothing;
     get diagnostics n_materials = row_count;
+  end if;
+
+  if p ? 'tasks' then
+    insert into ims_tasks (name)
+    select distinct btrim(v)
+    from jsonb_array_elements_text(p -> 'tasks') as v
+    where btrim(v) <> ''
+    on conflict (name) do nothing;
+    get diagnostics n_tasks = row_count;
   end if;
 
   if p ? 'stage_config' then
@@ -259,7 +277,7 @@ begin
   end if;
 
   return jsonb_build_object(
-    'people', n_people, 'vendors', n_vendors, 'materials', n_materials,
+    'people', n_people, 'vendors', n_vendors, 'materials', n_materials, 'tasks', n_tasks,
     'stage_config', n_stage, 'access_control', n_access, 'qty_master', n_qty
   );
 end;
