@@ -846,16 +846,16 @@
             </div>
 
             <div class="field">
-              <label>Task Name</label>
+              <label>Task Name *</label>
               <select id="f-taskname"><option value="">Select task...</option></select>
             </div>
             <div class="field">
-              <label>Point of Uses</label>
+              <label>Point of Uses *</label>
               <input type="text" id="f-pointofuses" placeholder="Where will this material be used?" autocomplete="off">
             </div>
 
             <div class="field">
-              <label>Estimated Delivery Date</label>
+              <label>Estimated Delivery Date *</label>
               <input type="date" id="f-edd">
             </div>
             <div class="field">
@@ -867,12 +867,8 @@
               <label>Remarks</label>
               <textarea id="f-remarks" placeholder="Optional remarks"></textarea>
             </div>
-            <div class="field">
-              <label>Request Entry Status *</label>
-              <div class="chip-group" id="f-entrystatus-chips"></div>
-              <input type="hidden" id="f-entrystatus">
-              <div style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">"Not Done" saves this as a draft — the approval flow won't start until you (or anyone) click "Start Approval Flow" on it later. "Done" starts the flow immediately.</div>
-            </div>
+            <!-- Every new request starts its approval flow immediately (no draft option). -->
+            <input type="hidden" id="f-entrystatus" value="Done">
             <button class="btn" id="submitBtn" onclick="submitRequest()">Submit Request</button>
             <div class="msg" id="formMsg"></div>
           </div>
@@ -1121,9 +1117,6 @@
         }
       }).imsApprovalGetCurrentUserInfo();
 
-      renderChips('f-entrystatus-chips', 'f-entrystatus', ['Not Done', 'Done']);
-      var firstEntryChip = document.querySelector('#f-entrystatus-chips .chip');
-      if (firstEntryChip) selectChip('f-entrystatus-chips', 'f-entrystatus', firstEntryChip);
 
       loadDashboard();
     }
@@ -1557,7 +1550,7 @@
       var taskName = document.getElementById('f-taskname').value.trim();
       var pointOfUses = document.getElementById('f-pointofuses').value.trim();
       var remarks = document.getElementById('f-remarks').value.trim();
-      var entryStatus = document.getElementById('f-entrystatus').value;
+      var entryStatus = 'Done';
       var msg = document.getElementById('formMsg');
       var btn = document.getElementById('submitBtn');
       msg.className = 'msg'; msg.textContent = '';
@@ -1570,11 +1563,14 @@
         msg.textContent = 'Construction Type, Block, and LOT are required for a Planned entry.';
         return;
       }
-      if (!material || !materialType || !entryStatus) {
+      if (!material || !materialType) {
         msg.className = 'msg error';
-        msg.textContent = 'Material Name, Material Type, and Request Entry Status are required.';
+        msg.textContent = 'Material Name and Material Type are required.';
         return;
       }
+      if (!taskName) { msg.className = 'msg error'; msg.textContent = 'Task Name is required.'; return; }
+      if (!pointOfUses) { msg.className = 'msg error'; msg.textContent = 'Point of Uses is required.'; return; }
+      if (!edd) { msg.className = 'msg error'; msg.textContent = 'Estimated Delivery Date is required.'; return; }
       if (!quantity || Number(quantity) <= 0) {
         msg.className = 'msg error'; msg.textContent = 'Quantity must be greater than 0.'; return;
       }
@@ -1591,7 +1587,7 @@
             var extra = res.qtySynced ? (' Remaining updated to ' + res.remainingAfter + '.') : '';
             msg.textContent = 'Request #' + res.srNo + ' created' + (entryStatus === 'Done' ? ' — approval flow started.' : ' as a draft.') + extra;
 
-            document.querySelectorAll('#f-project-chips .chip, #f-materialtype-chips .chip, #f-entrystatus-chips .chip').forEach(function(c){ c.classList.remove('selected'); });
+            document.querySelectorAll('#f-project-chips .chip, #f-materialtype-chips .chip').forEach(function(c){ c.classList.remove('selected'); });
             document.getElementById('f-project').value = '';
             document.getElementById('f-materialtype').value = '';
             resetAllEntryFields();
@@ -1599,9 +1595,6 @@
             document.getElementById('f-edd').value = '';
             document.getElementById('f-remarks').value = '';
             document.getElementById('f-pointofuses').value = '';
-            document.getElementById('f-entrystatus').value = '';
-            var firstEntryChip = document.querySelector('#f-entrystatus-chips .chip');
-            if (firstEntryChip) selectChip('f-entrystatus-chips', 'f-entrystatus', firstEntryChip);
             loadDashboard();
           } else {
             msg.className = 'msg error'; msg.textContent = res.error || 'Failed.';
