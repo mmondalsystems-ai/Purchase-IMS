@@ -510,7 +510,13 @@ def imsApprovalSubmitRequest(user, payload):
         uom = str(payload.get("uom") or "").strip()
         if not uom:
             raise UserError("UOM is required.")
-        entry_status = "Done" if payload.get("entryStatus") == "Done" else "Not Done"
+        if not str(payload.get("taskName") or "").strip():
+            raise UserError("Task Name is required.")
+        if not str(payload.get("pointOfUses") or "").strip():
+            raise UserError("Point of Uses is required.")
+        if not payload.get("estimatedDeliveryDate"):
+            raise UserError("Estimated Delivery Date is required.")
+        entry_status = "Done"  # always Done: every new request starts its approval flow
 
         user_email = user or "unknown"
         user_lower = user_email.lower()
