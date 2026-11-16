@@ -537,11 +537,12 @@ def imsApprovalSubmitRequest(user, payload):
             ts = now()
             row = conn.execute(
                 "insert into ims_requests (project, planned, construction_type, block, lot, material_name, "
-                "material_type, uom, quantity, estimated_delivery_date, status, entry_status, user_email, remarks, entry_timestamp) "
-                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Not Done',%s,%s,%s,%s) returning sr_no",
+                "material_type, task_name, point_of_uses, uom, quantity, estimated_delivery_date, status, entry_status, user_email, remarks, entry_timestamp) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'Not Done',%s,%s,%s,%s) returning sr_no",
                 (project, "Planned" if is_planned else "Non Planned",
                  payload.get("constructionType") or "", payload.get("block") or "", payload.get("lot") or "",
-                 payload["materialName"], payload["materialType"], uom, quantity,
+                 payload["materialName"], payload["materialType"],
+                 str(payload.get("taskName") or "").strip(), str(payload.get("pointOfUses") or "").strip(), uom, quantity,
                  _parse_iso_date(payload.get("estimatedDeliveryDate")), entry_status,
                  user_email, payload.get("remarks") or "", ts),
             ).fetchone()
@@ -631,6 +632,8 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             "lot": r["lot"],
             "materialName": r["material_name"],
             "materialType": material_type,
+            "taskName": r["task_name"] or "",
+            "pointOfUses": r["point_of_uses"] or "",
             "uom": r["uom"] or "",
             "quantity": _num(r["quantity"]),
             "estimatedDeliveryDate": fmt_date(r["estimated_delivery_date"]),
@@ -755,6 +758,7 @@ def imsApprovalGetMyQueue(user, asEmail=None):
                 "srNo": req["srNo"], "project": req["project"], "planType": req["planned"],
                 "materialName": req["materialName"], "materialType": req["materialType"],
                 "constructionType": req["constructionType"], "block": req["block"], "lot": req["lot"],
+                "taskName": req["taskName"], "pointOfUses": req["pointOfUses"],
                 "uom": req["uom"], "quantity": req["quantity"], "remarks": req["remarks"], "requestedBy": req["userEmail"],
                 "entryTimestamp": req["entryTimestamp"], "estimatedDeliveryDate": req["estimatedDeliveryDate"],
                 "indentNo": st["indent"]["indentNo"] if "indent" in st else "",

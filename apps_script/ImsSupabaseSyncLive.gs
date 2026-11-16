@@ -36,7 +36,7 @@ var ImsSupabaseSync_QTY_TAB = 'Material Quantity Master';
 
 var ImsSupabaseSync_REQ_KEYS = [
   'sr_no', 'project', 'planned', 'construction_type', 'block', 'lot', 'material_name',
-  'material_type', 'uom', 'quantity', 'estimated_delivery_date', 'status', 'entry_status',
+  'material_type', 'task_name', 'point_of_uses', 'uom', 'quantity', 'estimated_delivery_date', 'status', 'entry_status',
   'cancelled', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'user_email', 'remarks',
   'entry_timestamp'
 ];

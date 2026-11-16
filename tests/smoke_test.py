@@ -88,11 +88,13 @@ def main():
                  (row["constructionType"], row["block"], row["lot"], row["materialName"])][0]
     payload = {"project": "Orchard Amritaya", "planned": "Planned", "constructionType": row["constructionType"],
                "block": row["block"], "lot": row["lot"], "materialName": row["materialName"],
-               "materialType": "SITE MATERIAL", "uom": row["uom"] or "NOS", "quantity": first_dup["remaining"], "estimatedDeliveryDate": "2026-12-01",
+               "materialType": "SITE MATERIAL", "taskName": "Smoke Task", "pointOfUses": "Tower 2 Floor 3", "uom": row["uom"] or "NOS", "quantity": first_dup["remaining"], "estimatedDeliveryDate": "2026-12-01",
                "remarks": "smoke test", "entryStatus": "Done"}
     res = call(admin, "imsApprovalSubmitRequest", payload)
     check(res["success"] and res["qtySynced"] and res["remainingAfter"] == 0, "Planned submit deducts whole Remaining -> 0")
     sr1 = res["srNo"]
+    got_tp = [g for g in call(admin, "imsApprovalGetRequests") if g["srNo"] == sr1][0]
+    check(got_tp["taskName"] == "Smoke Task" and got_tp["pointOfUses"] == "Tower 2 Floor 3", "Task Name and Point of Uses are saved and returned")
     res2 = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=1))
     check(not res2["success"] and "more than the Remaining" in res2["error"], "second submit is rejected (nothing remaining)")
     res3 = call(nobody, "imsApprovalSubmitRequest", dict(payload, quantity=1))

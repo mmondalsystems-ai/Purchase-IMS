@@ -93,6 +93,8 @@ create table if not exists ims_requests (
   lot                   text not null default '',
   material_name         text not null,
   material_type         text not null,
+  task_name             text not null default '',
+  point_of_uses         text not null default '',
   uom                   text not null default '',
   quantity              numeric not null,
   estimated_delivery_date date,

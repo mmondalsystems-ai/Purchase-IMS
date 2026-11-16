@@ -84,6 +84,8 @@ language sql stable as $$
            'lot', r.lot,
            'material_name', r.material_name,
            'material_type', r.material_type,
+           'task_name', r.task_name,
+           'point_of_uses', r.point_of_uses,
            'uom', r.uom,
            'quantity', r.quantity,
            'estimated_delivery_date', to_char(r.estimated_delivery_date, 'YYYY-MM-DD'),
@@ -197,7 +199,7 @@ create or replace function ims_push_row(p_sr_no integer, p_changes jsonb) return
 language plpgsql as $$
 declare
   c_req_cols  constant text[] := array[
-    'project','planned','construction_type','block','lot','material_name','material_type','uom',
+    'project','planned','construction_type','block','lot','material_name','material_type','task_name','point_of_uses','uom',
     'quantity','estimated_delivery_date','status','entry_status','cancelled','cancelled_by',
     'cancelled_at','cancel_reason','user_email','remarks','entry_timestamp'];
   c_nontext   constant text[] := array[
