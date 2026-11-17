@@ -303,6 +303,16 @@ def get_approver_name(stage_key, project, material_type, po_amount, stage_cfg) -
     return entry["byProject"].get(project, "") or ""
 
 
+def stage_config_emails(project, stage_cfg, people_map) -> list:
+    """Everyone named as approver for ANY stage of this project in Stage Config."""
+    emails = set()
+    for entry in (stage_cfg or {}).values():
+        approver = entry["byProject"].get(project, "")
+        if approver:
+            emails.update(resolve_emails(approver, people_map))
+    return sorted(emails)
+
+
 def _load_context(conn) -> dict:
     return {
         "people": read_people_map(conn),
@@ -630,7 +640,9 @@ def _requests_impl(conn, current_user, is_admin, ctx):
 
     def cancel_emails(project):
         if project not in cancel_cache:
-            cancel_cache[project] = get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
+            cancel_cache[project] = sorted(set(
+                get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
+                + stage_config_emails(project, ctx["stage_cfg"], ctx["people"])))
         return cancel_cache[project]
 
     out = []
@@ -1016,6 +1028,25 @@ def imsApprovalActOnStagesWithSharedFields(user, payload):
 # Cancel
 # ---------------------------------------------------------------------------
 
+def imsApprovalCancelMany(user, payload):
+    """Cancels several requests with one shared reason/date. Each request is cancelled on its own,
+    so one failure (for example no permission) never blocks the others; the result lists every outcome."""
+    payload = payload or {}
+    sr_nos = payload.get("srNos") or []
+    if not sr_nos:
+        return {"success": False, "error": "No requests selected."}
+    results, done = [], 0
+    for sr in sr_nos:
+        one = imsApprovalCancelRequest(user, {"srNo": sr, "reason": payload.get("reason"),
+                                              "cancelDate": payload.get("cancelDate"), "asEmail": payload.get("asEmail")})
+        if one.get("success"):
+            done += 1
+        results.append({"srNo": sr, "success": bool(one.get("success")), "error": one.get("error", ""),
+                        "remainingAfter": one.get("remainingAfter")})
+    return {"success": done > 0, "doneCount": done, "total": len(sr_nos), "results": results,
+            "error": "" if done else (results[0]["error"] if results else "Failed.")}
+
+
 def imsApprovalCancelRequest(user, payload):
     try:
         if not payload or not payload.get("srNo"):
@@ -1034,11 +1065,12 @@ def imsApprovalCancelRequest(user, payload):
             ctx = _load_context(conn)
             project = req["project"]
             _, _, current, is_admin = _identity(user, payload.get("asEmail"))
-            grantees = get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
+            grantees = (get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
+                        + stage_config_emails(project, ctx["stage_cfg"], ctx["people"]))
             if not is_admin and current not in grantees:
                 raise UserError(
-                    "Only an admin or a user authorized in Access Control → "
-                    'Cancel Permission for "' + project + '" can cancel this request.'
+                    "Only an admin, a Stage Config approver of this project, or a user with Cancel Permission in "
+                    'Access Control for "' + project + '" can cancel this request.'
                 )
 
             cancel_date = now()
@@ -1091,4 +1123,5 @@ API = {
     "imsApprovalActOnStages": (imsApprovalActOnStages, True),
     "imsApprovalActOnStagesWithSharedFields": (imsApprovalActOnStagesWithSharedFields, True),
     "imsApprovalCancelRequest": (imsApprovalCancelRequest, True),
+    "imsApprovalCancelMany": (imsApprovalCancelMany, True),
 }

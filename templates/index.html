@@ -910,6 +910,14 @@
         <!-- CANCEL ENTRY -->
         <div id="page-cancelEntry" class="page">
           <div class="page-header"><div><h1 class="page-title">Cancel Entry</h1><p class="page-sub">Cancel a request to automatically restore its quantity back to "Material Quantity Master"</p></div></div>
+          <div class="bulk-toolbar">
+            <div class="bulk-left">
+              <input type="text" id="cancelSearchInput" placeholder="Filter by Sr No (e.g. 85 or 84,85,86)" oninput="renderCancelList()" style="width:280px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;">
+              <label><input type="checkbox" id="cancelSelectAll" onchange="selectAllCancel(this.checked)"> Select all</label>
+              <span class="bulk-count" id="cancelSelectedCount">0 selected</span>
+            </div>
+            <button class="btn small danger" id="cancelSelectedBtn" onclick="openCancelModalMany()" disabled>Cancel Selected</button>
+          </div>
           <div id="cancelList"><div class="spinner"></div></div>
         </div>
 
@@ -2153,10 +2161,50 @@
         .imsApprovalGetRequests(testAsEmail || '');
     }
 
+    var cancelSelected = {};
+
+    /** Requests shown on the Cancel Entry page after the Sr No filter (comma-separated list allowed). */
+    function cancelFilteredRequests() {
+      var q = (document.getElementById('cancelSearchInput').value || '').replace(/#/g, '').trim();
+      if (!q) return allRequests;
+      var terms = q.split(/[\s,]+/).filter(function(t) { return t; });
+      return allRequests.filter(function(r) {
+        var sr = String(r.srNo);
+        return terms.some(function(t) { return sr === t || (terms.length === 1 && sr.indexOf(t) !== -1); });
+      });
+    }
+
     function renderCancelList() {
       var list = document.getElementById('cancelList');
-      if (!allRequests.length) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; return; }
-      list.innerHTML = allRequests.map(renderCancelCard).join('');
+      var shown = cancelFilteredRequests();
+      if (!allRequests.length) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; updateCancelToolbar(); return; }
+      list.innerHTML = shown.length ? shown.map(renderCancelCard).join('') : '<div class="empty-state">No request matches this Sr No.</div>';
+      updateCancelToolbar();
+    }
+
+    function cancellableShown() {
+      return cancelFilteredRequests().filter(function(r) { return r.canCancel && !r.cancelled; });
+    }
+
+    function toggleCancelSelect(srNo, checked) {
+      if (checked) cancelSelected[srNo] = true; else delete cancelSelected[srNo];
+      updateCancelToolbar();
+    }
+
+    function selectAllCancel(checked) {
+      cancellableShown().forEach(function(r) { if (checked) cancelSelected[r.srNo] = true; else delete cancelSelected[r.srNo]; });
+      renderCancelList();
+    }
+
+    function updateCancelToolbar() {
+      var n = Object.keys(cancelSelected).length;
+      document.getElementById('cancelSelectedCount').textContent = n + ' selected';
+      document.getElementById('cancelSelectedBtn').disabled = n === 0;
+      var shown = cancellableShown();
+      var all = document.getElementById('cancelSelectAll');
+      var selShown = shown.filter(function(r) { return cancelSelected[r.srNo]; }).length;
+      all.checked = shown.length > 0 && selShown === shown.length;
+      all.indeterminate = selShown > 0 && selShown < shown.length;
     }
 
     function renderCancelCard(req) {
@@ -2171,10 +2219,14 @@
         : '';
       var actionHtml = canCancel
         ? '<button class="btn small danger" onclick="openCancelModal(' + req.srNo + ')">Cancel Entry</button>'
-        : (req.cancelled ? '' : '<span class="restricted-note">Only an admin or a user with Cancel Permission in Access Control can cancel this</span>');
+        : (req.cancelled ? '' : '<span class="restricted-note">Only an admin, a Stage Config approver of this project, or a user with Cancel Permission can cancel this</span>');
 
-      return '<div class="req-card' + (req.cancelled ? ' is-cancelled' : '') + '"><div class="req-header" style="cursor:default;">' +
-        '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> ' + statusPill + '</div>' +
+      var pick = (canCancel && !req.cancelled)
+        ? '<label class="queue-select" title="Select for bulk cancel"><input type="checkbox" ' + (cancelSelected[req.srNo] ? 'checked' : '') +
+          ' onchange="toggleCancelSelect(' + req.srNo + ', this.checked)"></label>'
+        : '<span class="queue-select-placeholder"></span>';
+      return '<div class="req-card' + (req.cancelled ? ' is-cancelled' : '') + '"><div class="req-header" style="cursor:default;">' + pick +
+        '<div style="flex:1;"><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> ' + statusPill + '</div>' +
         '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
         (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
         '<div class="req-sub">By ' + escapeHtml(req.userEmail) + ' · ' + req.entryTimestamp +
@@ -2186,10 +2238,20 @@
     }
 
     var cancelModalSrNo = null;
+    var cancelModalSrNos = null; // set when cancelling several requests at once
 
-    function openCancelModal(srNo) {
+    function openCancelModalMany() {
+      var list = Object.keys(cancelSelected).map(Number).sort(function(a, b) { return a - b; });
+      if (!list.length) return;
+      openCancelModal(null, list);
+    }
+
+    function openCancelModal(srNo, many) {
       cancelModalSrNo = srNo;
-      document.getElementById('cancelModalTitle').textContent = 'Cancel Request #' + srNo;
+      cancelModalSrNos = many || null;
+      document.getElementById('cancelModalTitle').textContent = many
+        ? ('Cancel ' + many.length + ' Requests (' + many.map(function(n) { return '#' + n; }).join(', ') + ')')
+        : ('Cancel Request #' + srNo);
       document.getElementById('cancelReasonInput').value = '';
       var today = new Date();
       var iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -2202,9 +2264,38 @@
     function closeCancelModal() {
       document.getElementById('cancelModalOverlay').classList.remove('open');
       cancelModalSrNo = null;
+      cancelModalSrNos = null;
+    }
+
+    function confirmCancelMany() {
+      var reason = document.getElementById('cancelReasonInput').value.trim();
+      var cancelDate = document.getElementById('cancelDateInput').value;
+      var msg = document.getElementById('cancelModalMsg');
+      if (!reason) { msg.className = 'msg error'; msg.textContent = 'Cancel Reason is required.'; return; }
+      if (!cancelDate) { msg.className = 'msg error'; msg.textContent = 'Cancel Date is required.'; return; }
+      var btn = document.getElementById('cancelModalConfirmBtn');
+      btn.disabled = true; btn.textContent = 'Cancelling...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Confirm Cancellation';
+          var failed = (res.results || []).filter(function(r) { return !r.success; });
+          (res.results || []).forEach(function(r) { if (r.success) delete cancelSelected[r.srNo]; });
+          closeCancelModal();
+          loadCancelList();
+          loadDashboard();
+          var text = (res.doneCount || 0) + ' of ' + (res.total || 0) + ' requests cancelled.';
+          if (failed.length) text += '\nNot cancelled: ' + failed.map(function(r) { return '#' + r.srNo + ' (' + r.error + ')'; }).join('; ');
+          alert(text);
+        })
+        .withFailureHandler(function(err) {
+          btn.disabled = false; btn.textContent = 'Confirm Cancellation';
+          msg.className = 'msg error'; msg.textContent = err.message || 'Failed to cancel the requests.';
+        })
+        .imsApprovalCancelMany({ srNos: cancelModalSrNos, reason: reason, cancelDate: cancelDate, asEmail: testAsEmail || '' });
     }
 
     function confirmCancel() {
+      if (cancelModalSrNos) { confirmCancelMany(); return; }
       if (!cancelModalSrNo) return;
       var reason = document.getElementById('cancelReasonInput').value.trim();
       var cancelDate = document.getElementById('cancelDateInput').value;
