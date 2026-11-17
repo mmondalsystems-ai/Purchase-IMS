@@ -887,6 +887,10 @@
         <!-- APPROVAL FLOW -->
         <div id="page-approvalFlow" class="page">
           <div class="page-header"><div><h1 class="page-title">Approval Flow</h1><p class="page-sub">Stages currently waiting on you</p></div></div>
+          <div class="field" style="max-width:320px; margin-bottom:14px;">
+            <label>Filter by Project</label>
+            <select class="queueProjectFilter" onchange="setQueueProjectFilter(this.value)"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
+          </div>
           <div id="queueList"><div class="spinner"></div></div>
         </div>
 
@@ -895,6 +899,10 @@
           <div class="page-header">
             <div><h1 class="page-title" id="stageDetailTitle">Stage</h1><p class="page-sub" id="stageDetailSub"></p></div>
             <button class="btn outline" onclick="navigate('approvalFlow', document.querySelector('[data-page=approvalFlow]'))">← Back to Approval Flow</button>
+          </div>
+          <div class="field" style="max-width:320px; margin-bottom:14px;">
+            <label>Filter by Project</label>
+            <select class="queueProjectFilter" onchange="setQueueProjectFilter(this.value)"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
           </div>
           <div id="stageDetailList"></div>
         </div>
@@ -1801,6 +1809,19 @@
     var STAGE_TILE_ICONS = ['✅','📄','🧮','🧾','💳','🛒','⚖️','📝','💰','🚚','📦','🚛'];
     var TILE_PREVIEW_LIMIT = 3; // how many materials a stage tile previews before "View all"
     var queueByStage = {};
+    var queueProjectFilter = '';
+    /** Items of one stage, narrowed to the selected project filter (if any). */
+    function queueGroup(stageKey) {
+      var g = queueByStage[stageKey] || [];
+      if (!queueProjectFilter) return g;
+      return g.filter(function(item) { return (item.project || '').toLowerCase() === queueProjectFilter.toLowerCase(); });
+    }
+    function setQueueProjectFilter(value) {
+      queueProjectFilter = value || '';
+      document.querySelectorAll('.queueProjectFilter').forEach(function(el) { el.value = queueProjectFilter; });
+      selectedQueueItems = {};
+      renderQueueTiles();
+    }
     var currentStageDetailKey = null;
     var selectedQueueItems = {};
 
@@ -1821,7 +1842,7 @@
     function getBulkSelectableItems(stageKey) {
       var s = stageCfgByKey(stageKey);
       if (!canBulkApproveStage(s)) return [];
-      return (queueByStage[stageKey] || []).filter(function(item) { return !!item.canAct; });
+      return queueGroup(stageKey).filter(function(item) { return !!item.canAct; });
     }
 
     function selectedCountForStage(stageKey) {
@@ -1985,7 +2006,7 @@
 
       var tiles = visible.map(function(o) {
         var s = o.s;
-        var group = queueByStage[s.key] || [];
+        var group = queueGroup(s.key);
         var colorClass = 'c' + (o.idx % 4);
         var icon = STAGE_TILE_ICONS[o.idx % STAGE_TILE_ICONS.length];
         var countLabel = group.length
@@ -2019,7 +2040,7 @@
 
     function refreshStageDetail() {
       var s = stageCfgByKey(currentStageDetailKey);
-      var group = queueByStage[currentStageDetailKey] || [];
+      var group = queueGroup(currentStageDetailKey);
       var selectable = getBulkSelectableItems(currentStageDetailKey);
       var selectedCount = selectedCountForStage(currentStageDetailKey);
       var bulkHtml = '';
