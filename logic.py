@@ -666,9 +666,8 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             "entryTimestamp": fmt_dt(r["entry_timestamp"]),
             "stages": {},
         }
-        requester = (req["userEmail"] or "").lower()
         req["canCancel"] = (not req["cancelled"]) and (
-            is_admin or current_user == requester or current_user in cancel_emails(project))
+            is_admin or current_user in cancel_emails(project))
 
         po_entry = stage_data.get("poEntry")
         po_amount = (po_entry["extras"].get("poAmount", "") if po_entry else "")
@@ -1035,11 +1034,10 @@ def imsApprovalCancelRequest(user, payload):
             ctx = _load_context(conn)
             project = req["project"]
             _, _, current, is_admin = _identity(user, payload.get("asEmail"))
-            requester = (req["user_email"] or "").lower()
             grantees = get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
-            if not is_admin and current != requester and current not in grantees:
+            if not is_admin and current not in grantees:
                 raise UserError(
-                    "Only the original requester, an admin, or a user authorized in Access Control → "
+                    "Only an admin or a user authorized in Access Control → "
                     'Cancel Permission for "' + project + '" can cancel this request.'
                 )
 

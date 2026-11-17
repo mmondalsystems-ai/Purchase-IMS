@@ -2168,7 +2168,7 @@
         : '';
       var actionHtml = canCancel
         ? '<button class="btn small danger" onclick="openCancelModal(' + req.srNo + ')">Cancel Entry</button>'
-        : (req.cancelled ? '' : '<span class="restricted-note">Only the requester, an admin, or a user in Access Control → Cancel Permission can cancel this</span>');
+        : (req.cancelled ? '' : '<span class="restricted-note">Only an admin or a user with Cancel Permission in Access Control can cancel this</span>');
 
       return '<div class="req-card' + (req.cancelled ? ' is-cancelled' : '') + '"><div class="req-header" style="cursor:default;">' +
         '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> ' + statusPill + '</div>' +
@@ -2555,7 +2555,7 @@
 
     function escapeHtml(str) {
       if (!str && str !== 0) return '';
-      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     init();
