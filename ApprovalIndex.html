@@ -1881,7 +1881,7 @@
         detailItem('Material Type', item.materialType) +
         detailItem('Task Name', item.taskName) +
         detailItem('Point of Uses', item.pointOfUses) +
-        detailItem('Quantity', item.quantity) +
+        detailItem('Quantity', item.quantity + (item.uom ? ' ' + item.uom : '')) +
         detailItem('Entry Type', item.planType) +
         detailItem('Construction Type', item.constructionType) +
         detailItem('Block', item.block) +
