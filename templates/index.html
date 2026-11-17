@@ -768,7 +768,7 @@
           <div style="display:flex; gap:16px; flex-wrap:wrap;">
             <div class="card" style="flex:2; min-width:340px;">
               <div style="font-weight:700; margin-bottom:10px;">Recent Requests</div>
-              <div id="dashRecentRequests"><div class="spinner"></div></div>
+              <div id="dashRecentRequests" style="max-height:520px; overflow-y:auto;"><div class="spinner"></div></div>
             </div>
             <div class="card" style="flex:1; min-width:260px;">
               <div style="font-weight:700; margin-bottom:10px;">Recent Activity</div>
@@ -877,6 +877,10 @@
         <!-- PURCHASE REQUEST -->
         <div id="page-purchaseRequest" class="page">
           <div class="page-header"><div><h1 class="page-title">Purchase Request</h1><p class="page-sub">All requests and their full approval progress</p></div></div>
+          <div class="field" style="max-width:320px; margin-bottom:14px;">
+            <label>Filter by Project</label>
+            <select id="reqProjectFilter" onchange="renderRequests()"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
+          </div>
           <div id="reqList"><div class="spinner"></div></div>
         </div>
 
@@ -1154,7 +1158,7 @@
         statCard('🚚', '#e3f6ea', 'Goods Received', goodsReceived) +
         statCard('₹', '#fdeee0', 'Total PO Value', '₹' + totalValue.toLocaleString('en-IN'));
 
-      var recent = reqs.slice(0, 6);
+      var recent = reqs.slice(0, 15);
       document.getElementById('dashRecentRequests').innerHTML = recent.length ? recent.map(function(r) {
         return '<div class="master-list-item"><span><span class="card-id-badge">#' + r.srNo + '</span><b>' + escapeHtml(r.materialName) + '</b> <span style="color:var(--text-muted);">(' + escapeHtml(r.project) + ')</span></span>' +
           '<span class="pill ' + (r.overallStatus === 'Done' ? 'done' : 'pending') + '">' + r.overallStatus + '</span></div>';
@@ -1636,6 +1640,8 @@
     function renderRequests() {
       var list = document.getElementById('reqList');
       var reqs = activeRequests(allRequests);
+      var pf = (document.getElementById('reqProjectFilter') || {}).value;
+      if (pf) reqs = reqs.filter(function(r) { return (r.project || '').toLowerCase() === pf.toLowerCase(); });
       var banner = '';
       if (purchaseRequestFocusSrNos !== null) {
         var focusSet = {};
@@ -1657,7 +1663,7 @@
       if (req.constructionType) bits.push(escapeHtml(req.constructionType));
       if (req.block) bits.push('Block ' + escapeHtml(req.block));
       if (req.lot) bits.push('LOT ' + escapeHtml(req.lot));
-      if (req.quantity !== '' && req.quantity !== undefined && req.quantity !== null) bits.push('Qty ' + req.quantity);
+      if (req.quantity !== '' && req.quantity !== undefined && req.quantity !== null) bits.push('Qty ' + req.quantity + (req.uom ? ' ' + escapeHtml(req.uom) : ''));
       if (req.taskName) bits.push('Task: ' + escapeHtml(req.taskName));
       if (req.pointOfUses) bits.push('Use: ' + escapeHtml(req.pointOfUses));
       return bits.join(' · ');
@@ -1947,7 +1953,7 @@
         return '<div class="glass-panel glass-empty">Nothing pending in this stage right now.</div>';
       }
       var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
-        var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity : '';
+        var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity + (item.uom ? ' ' + item.uom : '') : '';
         return '<div class="glass-item"><div class="glass-item-main">' +
           '<div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
           '<div class="glass-item-sub">#' + item.srNo + ' · ' + escapeHtml(item.project) + '</div></div>' +
