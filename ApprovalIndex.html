@@ -709,9 +709,6 @@
     .ss-item mark { background: #fff3b0; padding: 0 1px; border-radius: 2px; }
     .ss-note { padding: 8px 12px; font-size: 12px; color: var(--text-muted); }
   </style>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IMS Purchase Approval Tracker</title>
-  <script src="/static/shim.js"></script>
 </head>
 <body>
 
@@ -748,7 +745,7 @@
           <button class="btn small outline" onclick="startTestAs()">Test As</button>
         </div>
         <div class="spacer"></div>
-        <div class="user-chip"><div class="avatar" id="userAvatar">--</div><span id="userEmailLabel"></span><a href="/auth/logout" title="Sign out" style="margin-left:10px;font-size:12px;font-weight:600;color:#2458b6;">Sign out</a></div>
+        <div class="user-chip"><div class="avatar" id="userAvatar">--</div><span id="userEmailLabel"></span></div>
       </div>
 
       <div id="testAsBanner" style="display:none; padding:10px 28px; background:#fef3c7; color:#92400e; font-size:12.5px; font-weight:600; align-items:center; gap:10px;">
@@ -818,9 +815,9 @@
                 <input type="text" id="f-uom" disabled placeholder="Select a material first...">
               </div>
               <div class="field">
-                <label>Quantity (auto-filled from Remaining) *</label>
-                <input type="text" id="f-quantity" disabled placeholder="Select a material first...">
-                <div class="field-hint" id="remainingHint">Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.</div>
+                <label>Quantity *</label>
+                <input type="number" id="f-quantity" min="0" step="any" disabled placeholder="Select a material first...">
+                <div class="field-hint" id="remainingHint">Enter the quantity you need. It will be deducted from the Remaining value in "Material Quantity Master" for this combination, and restored if the entry is cancelled.</div>
               </div>
             </div>
 
@@ -1515,23 +1512,29 @@
       if (remaining === null || remaining === undefined || !opt.value) {
         qtyInput.value = '';
         uomInput.value = '';
-        hint.textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
+        hint.textContent = 'Enter the quantity you need. It will be deducted from the Remaining value in "Material Quantity Master" for this combination, and restored if the entry is cancelled.';
         return;
       }
-      qtyInput.value = remaining;
+      qtyInput.value = '';
       uomInput.value = uom || '';
       var remNum = Number(remaining);
       if (isNaN(remNum) || remNum <= 0) {
+        qtyInput.disabled = true;
         hint.innerHTML = '<span style="color:var(--danger); font-weight:600;">Remaining is ' + remaining + ' — nothing left to request for this material.</span>';
       } else {
-        hint.textContent = 'Remaining in master: ' + remaining + ' — the full amount will be requested and Remaining will be set to 0 on submit.';
+        qtyInput.disabled = false;
+        qtyInput.max = remNum;
+        qtyInput.placeholder = 'Enter quantity (max ' + remaining + ')';
+        hint.textContent = 'Remaining in master: ' + remaining + ' — enter the quantity you need (up to ' + remaining + '). Remaining will reduce by that amount on submit and be restored if the entry is cancelled.';
       }
     }
 
     function clearQuantity() {
       document.getElementById('f-quantity').value = '';
+      document.getElementById('f-quantity').disabled = true;
+      document.getElementById('f-quantity').placeholder = 'Select a material first...';
       document.getElementById('f-uom').value = '';
-      document.getElementById('remainingHint').textContent = 'Quantity is set automatically from the Remaining value in "Material Quantity Master" for this combination — this entry will use up the full remaining quantity.';
+      document.getElementById('remainingHint').textContent = 'Enter the quantity you need. It will be deducted from the Remaining value in "Material Quantity Master" for this combination, and restored if the entry is cancelled.';
     }
 
     // ---------- NEW ENTRY: submit ----------
@@ -1588,6 +1591,13 @@
       }
       if (!uom) {
         msg.className = 'msg error'; msg.textContent = 'UOM is required.'; return;
+      }
+      if (isPlanned) {
+        var selOpt = document.getElementById('f-material').options[document.getElementById('f-material').selectedIndex];
+        var remAvail = selOpt ? Number(selOpt.getAttribute('data-remaining')) : NaN;
+        if (!isNaN(remAvail) && Number(quantity) > remAvail) {
+          msg.className = 'msg error'; msg.textContent = 'Quantity ' + quantity + ' is more than the Remaining ' + remAvail + '.'; return;
+        }
       }
 
       btn.disabled = true; btn.textContent = 'Submitting...';
