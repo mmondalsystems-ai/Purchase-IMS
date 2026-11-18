@@ -58,7 +58,8 @@ var ImsSupabaseSync_ALIASES = {
   'estimateddeliverydate': 'estimated_delivery_date', 'deliverydate': 'estimated_delivery_date',
   'useremail': 'user_email', 'email': 'user_email', 'timestamp': 'entry_timestamp',
   'entrytimestamp': 'entry_timestamp', 'cancelreason': 'cancel_reason',
-  'cancelledby': 'cancelled_by', 'cancelledat': 'cancelled_at', 'entrystatus': 'entry_status'
+  'cancelledby': 'cancelled_by', 'cancelledat': 'cancelled_at', 'entrystatus': 'entry_status',
+  'pointofusage': 'point_of_uses', 'pointofuse': 'point_of_uses', 'pointofuses': 'point_of_uses'
 };
 
 var ImsSupabaseSync_ROW_MODE_MAX = 25;   // more changed rows than this -> column batch mode
@@ -169,6 +170,26 @@ function ImsSupabaseSync_pull_(forceFull) {
   props.setProperty('IMS_SYNC_SINCE', res.now);
 }
 
+/**
+ * Delay (days) columns must be plain numbers. Sheets sometimes formats them as date-time, which
+ * shows 0 as "30-Dec-1899 12:00 AM". This sets the number format of every *_delay_days column.
+ * Delay = Planned - Actual in days with 2 decimals (time counts), so a stage approved AFTER its planned time is negative.
+ */
+function ImsSupabaseSync_formatDelayCols_(sheet, entries) {
+  var rows = Math.max(sheet.getMaxRows() - 1, 1);
+  (entries || []).forEach(function (e) {
+    if (/_delay_days$/.test(e.key)) sheet.getRange(2, e.col, rows, 1).setNumberFormat('0.00');
+  });
+}
+
+/** One-off: run this from the editor to fix the format of all Delay (days) columns right now. */
+function ImsSupabaseSync_fixDelayFormat() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ImsSupabaseSync_DEFAULT_TAB);
+  var info = ImsSupabaseSync_readMap_(sheet);
+  ImsSupabaseSync_formatDelayCols_(sheet, info.entries);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Delay (days) columns are now plain numbers.', 'IMS Sync', 5);
+}
+
 /** Writes changed requests into the tracker tab (matched by Sr No). */
 function ImsSupabaseSync_applyRequests_(sheet, requests) {
   var info = ImsSupabaseSync_readMap_(sheet);
@@ -177,6 +198,7 @@ function ImsSupabaseSync_applyRequests_(sheet, requests) {
     return;
   }
   var pull = info.entries.filter(function (e) { return e.pull && e.key !== 'sr_no'; });
+  ImsSupabaseSync_formatDelayCols_(sheet, info.entries);
   var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
   var pending = ImsSupabaseSync_getPending_();
   var lastCol = Math.max(sheet.getLastColumn(), 1);

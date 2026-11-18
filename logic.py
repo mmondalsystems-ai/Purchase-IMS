@@ -475,6 +475,8 @@ def _initialize_stages(conn, sr_no, project, material_type, base_ts, stage_cfg):
             continue  # set later, only if actually required
         if key == "delivery":
             planned = add_days(po_prep_planned, 15)
+        elif key == "poEntry":
+            planned = add_days(prev_planned, 3)  # PO Rate -> PO Preparation: 3 days gap
         else:
             planned = add_days(prev_planned, 1)
         rows[key]["planned_at"] = planned
