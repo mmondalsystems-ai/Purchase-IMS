@@ -39,6 +39,8 @@ def client_for(email):
 
 
 def call(c, fn, *args):
+    if fn == "imsApprovalSubmitRequest" and args and isinstance(args[0], dict):
+        args = (dict({"taskName": "Smoke Task", "pointOfUses": "Site", "estimatedDeliveryDate": "2026-12-01"}, **args[0]),) + args[1:]
     r = c.post("/api/" + fn, json={"args": list(args)})
     assert r.status_code == 200, (fn, r.status_code, r.text)
     j = r.json()
@@ -95,6 +97,10 @@ def main():
     sr1 = res["srNo"]
     got_tp = [g for g in call(admin, "imsApprovalGetRequests") if g["srNo"] == sr1][0]
     badtask = call(admin, "imsApprovalSubmitRequest", dict(payload, taskName="Not In Master", quantity=1))
+    for missing, text_ in (("taskName", "Task Name is required"), ("pointOfUses", "Point of Uses is required"),
+                           ("estimatedDeliveryDate", "Estimated Delivery Date is required")):
+        r_ = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=1, **{missing: ""}))
+        check(not r_["success"] and text_ in r_["error"], text_)
     check(not badtask["success"] and "Task Master" in badtask["error"], "Task Name outside Task Master is rejected")
     check("Smoke Task" in call(admin, "imsApprovalGetTasks"), "Task Master list is returned")
     check(got_tp["taskName"] == "Smoke Task" and got_tp["pointOfUses"] == "Tower 2 Floor 3", "Task Name and Point of Uses are saved and returned")
@@ -107,18 +113,15 @@ def main():
     bad = call(admin, "imsApprovalSubmitRequest", dict(payload, quantity=0))
     check(not bad["success"] and "greater than 0" in bad["error"], "quantity 0 is rejected")
 
-    print("Draft entry and Start Approval Flow")
+    print("Entry Status is always Done (no draft)")
     draft = call(chinmoy, "imsApprovalSubmitRequest", {
         "project": "HO", "planned": "Non Planned", "materialName": "CEMENT", "materialType": "HO",
         "uom": "BAG", "quantity": 25, "entryStatus": "Not Done", "remarks": "draft"})
-    check(draft["success"] and draft["qtySynced"] is False, "Non Planned draft saved, no master sync")
+    check(draft["success"] and draft["qtySynced"] is False, "Non Planned entry saved, no master sync")
     sr2 = draft["srNo"]
     reqs = call(admin, "imsApprovalGetRequests")
     r2 = next(r for r in reqs if r["srNo"] == sr2)
-    check(r2["entryStatus"] == "Not Done" and r2["stages"]["approval"]["planned"] == "", "draft has no planned dates")
-    check(not call(nobody, "imsApprovalStartFlow", sr2)["success"], "stranger cannot start someone else's draft")
-    check(call(chinmoy, "imsApprovalStartFlow", sr2)["success"], "requester starts the flow")
-    check(not call(chinmoy, "imsApprovalStartFlow", sr2)["success"], "starting twice is rejected")
+    check(r2["entryStatus"] == "Done" and r2["stages"]["approval"]["planned"] != "", "entryStatus Not Done is ignored, flow starts at once")
 
     print("Full workflow for request #%d (Planned, SITE MATERIAL, Advance Payment = Yes)" % sr1)
     extras_for = {
@@ -241,11 +244,17 @@ def main():
                                                       "materialType": "SITE MATERIAL", "uom": "NOS", "quantity": 2, "entryStatus": "Done"})
     check(sub["success"] and sub["remainingAfter"] == qty2["remaining"] - 2, "partial quantity deducted")
     check(not call(nobody, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "x"})["success"], "stranger cannot cancel")
-    check(not call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": ""})["success"], "cancel reason is required")
-    c = call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "wrong item", "cancelDate": "2026-11-05"})
+    check(not call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "mine"})["success"], "requester without Cancel Permission cannot cancel")
+    check(not call(admin, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": ""})["success"], "cancel reason is required")
+    c = call(admin, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "wrong item", "cancelDate": "2026-11-05"})
     check(c["success"] and c["qtyRestored"] and c["remainingAfter"] == qty2["remaining"], "cancel restores Remaining")
-    check(not call(chinmoy, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "again"})["success"], "cannot cancel twice")
+    check(not call(admin, "imsApprovalCancelRequest", {"srNo": sub["srNo"], "reason": "again"})["success"], "cannot cancel twice")
     check(not call(admin, "imsApprovalActOnStage", {"srNo": sub["srNo"], "stageKey": "approval", "extraFields": {}})["success"], "cancelled request cannot be approved")
+    many = [call(chinmoy, "imsApprovalSubmitRequest", {"project": "HO", "planned": "Non Planned", "materialName": "CEMENT", "materialType": "HO",
+            "taskName": "Smoke Task", "pointOfUses": "x", "uom": "BAG", "quantity": 1, "estimatedDeliveryDate": "2026-12-01"})["srNo"] for _ in range(2)]
+    check(not call(nobody, "imsApprovalCancelMany", {"srNos": many, "reason": "bulk"})["success"], "stranger cannot bulk cancel")
+    cm = call(admin, "imsApprovalCancelMany", {"srNos": many + [many[0]], "reason": "bulk test"})
+    check(cm["doneCount"] == 2 and cm["total"] == 3 and not cm["results"][2]["success"], "bulk cancel: 2 cancelled, repeat rejected, others unaffected")
     cancelled = next(r for r in call(admin, "imsApprovalGetRequests") if r["srNo"] == sub["srNo"])
     check(cancelled["cancelled"] and cancelled["cancelReason"] == "wrong item" and cancelled["cancelledAt"].startswith("05-Nov-2026"), "cancel details stored")
     check(all(q["srNo"] != sub["srNo"] for q in call(admin, "imsApprovalGetMyQueue")), "cancelled request is not in anyone's queue")

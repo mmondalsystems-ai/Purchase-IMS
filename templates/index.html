@@ -708,6 +708,95 @@
     .ss-item.active, .ss-item:hover { background: #e8f0ff; }
     .ss-item mark { background: #fff3b0; padding: 0 1px; border-radius: 2px; }
     .ss-note { padding: 8px 12px; font-size: 12px; color: var(--text-muted); }
+
+    /* ===== Redesigned Purchase Request accordion + Approval Stage cards (UI only) ===== */
+    .ui-ico { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; flex:0 0 auto; }
+    .pr-card { border:1px solid var(--border); border-radius:12px; margin-bottom:12px; background:#fff; overflow:hidden; transition:box-shadow .15s, border-color .15s; }
+    .pr-card.open { border-color:#2f6bff; box-shadow:0 0 0 1px #2f6bff, 0 10px 26px rgba(47,107,255,.10); }
+    .pr-head { display:flex; align-items:center; gap:14px; padding:14px 18px; cursor:pointer; }
+    .pr-chev { width:34px; height:34px; border-radius:9px; border:1px solid #d7e1f0; background:#f3f7ff; color:#2458b6; display:flex; align-items:center; justify-content:center; flex:0 0 auto; transition:transform .15s; }
+    .pr-card.open .pr-chev { transform:rotate(90deg); }
+    .pr-badge { background:#2f6bff; color:#fff; font-weight:800; font-size:14px; padding:8px 14px; border-radius:9px; flex:0 0 auto; }
+    .pr-main { flex:1; min-width:0; }
+    .pr-title { font-size:16px; font-weight:800; color:#172033; line-height:1.25; }
+    .pr-meta { font-size:12.5px; color:#667085; margin-top:3px; display:flex; flex-wrap:wrap; gap:4px 12px; }
+    .pr-meta b { color:#2b3648; font-weight:600; }
+    .pr-meta .sep { color:#cbd5e1; }
+    .pr-proj { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.3px; color:#475569; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle; }
+    .pr-status { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; border-radius:12px; font-weight:800; font-size:14px; flex:0 0 auto; }
+    .pr-status.pending { background:#fff4df; color:#b45f06; border:1px solid #f6e3b5; }
+    .pr-status.done { background:#e8fbf3; color:#0a805c; border:1px solid #c9f1df; }
+    .pr-status.cancelled { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; }
+    .pr-body { display:none; padding:0 18px 18px; }
+    .pr-card.open .pr-body { display:block; }
+    .pr-sec { margin-top:12px; border:1px solid #e6ecf5; border-radius:10px; overflow:hidden; background:#fff; }
+    .pr-sec-title { display:flex; align-items:center; gap:9px; padding:9px 14px; background:#eef3fb; font-weight:800; font-size:15px; color:#172033; }
+    .pr-sec-title .ui-ico { color:#2f6bff; width:18px; height:18px; }
+    .pr-info { display:grid; grid-template-columns:1fr 1fr; gap:0 34px; padding:12px 18px 14px; }
+    .pr-info-col { display:flex; flex-direction:column; }
+    .pr-info-row { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:13.5px; }
+    .pr-info-row .ui-ico { color:#2f6bff; }
+    .pr-info-k { width:130px; color:#344054; flex:0 0 auto; }
+    .pr-info-c { color:#98a2b3; width:10px; flex:0 0 auto; }
+    .pr-info-v { font-weight:700; color:#172033; min-width:0; overflow-wrap:anywhere; }
+    .pr-info-wide { grid-column:1 / -1; }
+    .fl-steps { display:flex; padding:16px 10px 6px; overflow-x:auto; }
+    .fl-step { flex:1 0 92px; min-width:92px; display:flex; flex-direction:column; align-items:center; text-align:center; position:relative; padding:0 4px; }
+    .fl-step::before { content:''; position:absolute; top:15px; left:-50%; width:100%; height:3px; background:#dbe3ef; z-index:0; }
+    .fl-step:first-child::before { display:none; }
+    .fl-step.done::before, .fl-step.current::before { background:#16a34a; }
+    .fl-step.current::after { content:''; position:absolute; top:15px; left:50%; width:50%; height:3px; background:linear-gradient(90deg,#2f6bff,#dbe3ef); z-index:0; }
+    .fl-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; background:#fff; border:2px solid #cbd5e1; color:#64748b; position:relative; z-index:1; }
+    .fl-step.done .fl-dot { background:#16a34a; border-color:#16a34a; color:#fff; }
+    .fl-step.current .fl-dot { background:#2f6bff; border-color:#2f6bff; color:#fff; box-shadow:0 0 0 4px rgba(47,107,255,.18); }
+    .fl-step.skipped .fl-dot { background:#f1f5f9; border-style:dashed; }
+    .fl-lbl { margin-top:7px; font-size:11.5px; font-weight:700; color:#475569; line-height:1.25; }
+    .fl-sub { font-size:11px; color:#64748b; }
+    .fl-step.done .fl-lbl, .fl-step.done .fl-sub { color:#15803d; }
+    .fl-step.current .fl-lbl, .fl-step.current .fl-sub { color:#2458b6; }
+    .fl-table-wrap { padding:6px 12px 14px; overflow-x:auto; }
+    .fl-table { width:100%; border-collapse:collapse; font-size:13px; min-width:720px; }
+    .fl-table thead th { background:#eef3fb; color:#344054; font-weight:800; text-align:left; padding:9px 10px; font-size:12.5px; }
+    .fl-table thead th:first-child { border-radius:8px 0 0 8px; }
+    .fl-table thead th:last-child { border-radius:0 8px 8px 0; }
+    .fl-table td { padding:10px; border-bottom:1px solid #edf1f7; vertical-align:middle; color:#1f2a3d; }
+    .fl-table tr.cur td { background:#e9f0ff; }
+    .fl-table tr.skip td { color:#94a3b8; }
+    .fl-num { width:26px; height:26px; border-radius:50%; border:1.5px solid #2f6bff; color:#2f6bff; display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; }
+    .fl-stage { font-weight:700; }
+    .fl-appr { font-size:11.5px; color:#64748b; font-weight:500; margin-top:2px; }
+    .fl-dt { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+    .fl-dt .ui-ico { color:#475569; width:14px; height:14px; }
+    .fl-pill { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:999px; font-weight:800; font-size:12px; white-space:nowrap; }
+    .fl-pill.done { background:#e8fbf3; color:#0a805c; border:1px solid #bfe9d4; }
+    .fl-pill.pending { background:#fff4df; color:#b45f06; border:1px solid #f6e3b5; }
+    .fl-pill.skipped { background:#f1f5f9; color:#64748b; border:1px solid #e2e8f0; }
+    .fl-extra { font-size:12px; color:#475569; }
+    .fl-extra b { color:#172033; }
+    .qc-card { border:1px solid var(--border); border-radius:12px; margin-bottom:12px; background:#fff; overflow:hidden; }
+    .qc-card.selected { border-color:#2f6bff; background:#f8fbff; }
+    .qc-card.open { box-shadow:0 8px 22px rgba(23,32,51,.08); }
+    .qc-head { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; }
+    .qc-chev { width:34px; height:34px; border-radius:9px; border:1px solid #d7e1f0; background:#f3f7ff; color:#2458b6; display:flex; align-items:center; justify-content:center; flex:0 0 auto; transition:transform .15s; }
+    .qc-card.open .qc-chev { transform:rotate(180deg); }
+    .qc-main { flex:1; min-width:0; }
+    .qc-tags { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .qc-title { font-size:16px; font-weight:800; margin-top:4px; color:#172033; }
+    .qc-sub { font-size:12.5px; color:#667085; margin-top:3px; }
+    .qc-sub b { color:#2b3648; }
+    .qc-right { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex:0 0 auto; }
+    .qc-body { display:none; border-top:1px solid #e6ecf5; }
+    .qc-card.open .qc-body { display:block; }
+    .qc-tabs { display:flex; gap:6px; padding:0 16px; border-bottom:1px solid #e6ecf5; background:#fcfdff; }
+    .qc-tab { display:inline-flex; align-items:center; gap:8px; padding:11px 14px; font-weight:700; font-size:14px; color:#475569; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; margin-bottom:-1px; }
+    .qc-tab.active { color:#2f6bff; border-bottom-color:#2f6bff; }
+    .qc-pane { display:none; padding:10px 16px 16px; }
+    .qc-pane.active { display:block; }
+    @media (max-width:760px) {
+      .pr-head, .qc-head { flex-wrap:wrap; }
+      .pr-info { grid-template-columns:1fr; }
+      .pr-status { padding:7px 12px; font-size:12.5px; }
+    }
   </style>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IMS Purchase Approval Tracker</title>
@@ -1666,6 +1755,120 @@
       return advReq === 'Yes';
     }
 
+
+    // ---------- Shared UI helpers (stepper, flow table, icons) ----------
+    var UI_ICONS = {
+      chevR: '<path d="M9 6l6 6-6 6"/>', chevD: '<path d="M6 9l6 6 6-6"/>',
+      clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      flow: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="12" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8 7l8 4M8 17l8-4"/>',
+      cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/>',
+      doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>',
+      box: '<path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/>',
+      layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+      user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+      pin: '<path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+      task: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12l2 2 4-4"/>',
+      scale: '<path d="M12 4v16M5 20h14M6 8h12"/><path d="M6 8l-3 6a3 3 0 006 0zM18 8l-3 6a3 3 0 006 0z"/>',
+      tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>'
+    };
+    function ico(name) { return '<svg class="ui-ico" viewBox="0 0 24 24" aria-hidden="true">' + (UI_ICONS[name] || '') + '</svg>'; }
+
+    function requestBySrNo(srNo) {
+      for (var i = 0; i < allRequests.length; i++) if (Number(allRequests[i].srNo) === Number(srNo)) return allRequests[i];
+      return null;
+    }
+
+    /** Horizontal 1..N stepper: green = done, blue = current (first not-done applicable stage), grey = later. */
+    function flowStepperHtml(req) {
+      var currentKey = null;
+      var steps = stageConfig.map(function(s, i) {
+        var applicable = isStageApplicable(req, s.key);
+        var sd = req.stages[s.key] || {};
+        var done = applicable && sd.status === s.statusValues.done;
+        var cls = 'fl-step';
+        var sub;
+        if (!applicable) { cls += ' skipped'; sub = 'Skipped'; }
+        else if (done) { cls += ' done'; sub = s.statusValues.done; }
+        else if (!currentKey) { currentKey = s.key; cls += ' current'; sub = 'Pending'; }
+        else { sub = 'Pending'; }
+        return '<div class="' + cls + '"><div class="fl-dot">' + (done ? ico('check') : (i + 1)) + '</div>' +
+          '<div class="fl-lbl">' + escapeHtml(s.name) + '</div><div class="fl-sub">(' + escapeHtml(sub) + ')</div></div>';
+      }).join('');
+      return '<div class="fl-steps">' + steps + '</div>';
+    }
+
+    /** Stage table: #, Stage, Planned, Actual, Delay, Status, Action By, Remarks (+ Action when asked). */
+    function flowTableHtml(req, withActions) {
+      var currentKey = null;
+      var anyAction = false;
+      var rows = stageConfig.map(function(s, i) {
+        var applicable = isStageApplicable(req, s.key);
+        var sd = req.stages[s.key] || {};
+        var doneLabel = s.statusValues.done;
+        var done = applicable && sd.status === doneLabel;
+        var isCur = applicable && !done && !currentKey;
+        if (isCur) currentKey = s.key;
+        var num = '<span class="fl-num">' + (i + 1) + '</span>';
+        if (!applicable) {
+          return '<tr class="skip"><td>' + num + '</td><td><div class="fl-stage">' + escapeHtml(s.name) + '</div></td>' +
+            '<td colspan="6"><span class="fl-pill skipped">Skipped</span></td>' + (withActions ? '<td></td>' : '') + '</tr>';
+        }
+        if (!sd.isMyStage) {
+          return '<tr><td>' + num + '</td><td><div class="fl-stage">' + escapeHtml(s.name) + '</div></td>' +
+            '<td colspan="2" class="restricted-note">Restricted</td><td>—</td>' +
+            '<td><span class="fl-pill ' + (done ? 'done' : 'pending') + '">' + escapeHtml(sd.status || '') + '</span></td><td>—</td><td>—</td>' +
+            (withActions ? '<td></td>' : '') + '</tr>';
+        }
+        var delayHtml = '—';
+        if (sd.delay !== '' && sd.delay !== undefined && sd.delay !== null) {
+          var d = Number(sd.delay);
+          delayHtml = '<b class="' + (d < 0 ? 'delay-pos' : 'delay-neg') + '">' + d + ' d</b>';
+        }
+        var extras = (s.extra || []).map(function(ex) {
+          var val = sd[ex.key];
+          return val ? '<div class="fl-extra">' + escapeHtml(ex.label) + ': <b>' + escapeHtml(val.toString()) + '</b></div>' : '';
+        }).join('');
+        var approver = sd.approver || (s.computedApprover ? 'Determined after PO Entry Stage' : 'No approver set for this project');
+        var actionBtn = '';
+        if (withActions && sd.canCurrentUserAct) {
+          anyAction = true;
+          actionBtn = '<button class="btn small" onclick="openModal(' + req.srNo + ', \'' + s.key + '\')">Mark ' + escapeHtml(doneLabel) + '</button>';
+        }
+        return '<tr' + (isCur ? ' class="cur"' : '') + '><td>' + num + '</td>' +
+          '<td><div class="fl-stage">' + escapeHtml(s.name) + '</div><div class="fl-appr">' + escapeHtml(approver) + '</div></td>' +
+          '<td><span class="fl-dt">' + ico('cal') + (escapeHtml(sd.planned) || '—') + '</span></td>' +
+          '<td>' + (sd.actual ? '<span class="fl-dt">' + ico('cal') + escapeHtml(sd.actual) + '</span>' : '—') + '</td>' +
+          '<td>' + delayHtml + '</td>' +
+          '<td><span class="fl-pill ' + (done ? 'done' : 'pending') + '">' + (done ? ico('check') : ico('clock')) + escapeHtml(sd.status || '') + '</span></td>' +
+          '<td>' + (done && sd.approvedBy ? '<b>' + escapeHtml(sd.approvedBy) + '</b>' : '—') + '</td>' +
+          '<td>' + (extras || '—') + '</td>' +
+          (withActions ? '<td>' + actionBtn + '</td>' : '') + '</tr>';
+      }).join('');
+      return '<div class="fl-table-wrap"><table class="fl-table"><thead><tr><th>#</th><th>Stage</th><th>Planned Date &amp; Time</th>' +
+        '<th>Actual Date &amp; Time</th><th>Delay</th><th>Status</th><th>Action By</th><th>Remarks</th>' + (withActions ? '<th>Action</th>' : '') +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    }
+
+    function infoRow(icon, label, value) {
+      if (value === '' || value === undefined || value === null) return '';
+      return '<div class="pr-info-row">' + ico(icon) + '<span class="pr-info-k">' + escapeHtml(label) + '</span><span class="pr-info-c">:</span>' +
+        '<span class="pr-info-v">' + escapeHtml(String(value)) + '</span></div>';
+    }
+
+    function requestInfoHtml(req) {
+      var qty = (req.quantity !== '' && req.quantity !== undefined && req.quantity !== null)
+        ? req.quantity + (req.uom ? ' ' + req.uom : '') : '';
+      var left = infoRow('layers', 'Project', req.project) + infoRow('task', 'Task', req.taskName) +
+        infoRow('box', 'Material Type', req.materialType) + infoRow('pin', 'Point of Uses', req.pointOfUses) +
+        infoRow('scale', 'Quantity', qty) +
+        infoRow('tag', 'Construction Type', req.constructionType) + infoRow('tag', 'Block', req.block) + infoRow('tag', 'LOT', req.lot);
+      var right = infoRow('scale', 'UOM', req.uom) + infoRow('doc', 'Entry Type', req.planned) +
+        infoRow('user', 'Requested By', req.userEmail) + infoRow('cal', 'Requested On', req.entryTimestamp) +
+        infoRow('cal', 'EDD (Planned)', req.estimatedDeliveryDate) + infoRow('doc', 'Remarks', req.remarks);
+      return '<div class="pr-info"><div class="pr-info-col">' + left + '</div><div class="pr-info-col">' + right + '</div></div>';
+    }
+
     function renderRequests() {
       var list = document.getElementById('reqList');
       var reqs = activeRequests(allRequests);
@@ -1714,69 +1917,30 @@
         '</div></div>';
       }
 
-      var applicableStages = stageConfig.filter(function(s){ return isStageApplicable(req, s.key); });
-      var doneCount = applicableStages.filter(function(s){ return req.stages[s.key].status === s.statusValues.done; }).length;
-
-      var stageRows = stageConfig.map(function(s) {
-        var applicable = isStageApplicable(req, s.key);
-        var sd = req.stages[s.key];
-        if (!applicable) {
-          return '<div class="stage-row"><div class="stage-name-col"><div class="stage-name">' + s.name + '</div></div>' +
-            '<div class="stage-dates"><span class="pill skipped">Skipped</span></div></div>';
-        }
-        if (!sd.isMyStage) {
-          var doneLabelR = s.statusValues.done;
-          var pillClassR = sd.status === doneLabelR ? 'done' : 'pending';
-          return '<div class="restricted-row"><div class="stage-name">' + s.name + '</div>' +
-            '<div style="display:flex; align-items:center; gap:10px;"><span class="restricted-note">Restricted</span>' +
-            '<span class="pill ' + pillClassR + '">' + sd.status + '</span></div></div>';
-        }
-        var doneLabel = s.statusValues.done;
-        var pillClass = sd.status === doneLabel ? 'done' : 'pending';
-        var delayHtml = '';
-        if (sd.delay !== '' && sd.delay !== undefined && sd.delay !== null) {
-          var d = Number(sd.delay);
-          delayHtml = '<span>Delay: <b class="' + (d < 0 ? 'delay-pos' : 'delay-neg') + '">' + d + ' d</b></span>';
-        }
-        var actionHtml = sd.canCurrentUserAct
-          ? '<button class="btn small" onclick="openModal(' + req.srNo + ', \'' + s.key + '\')">Mark ' + doneLabel + '</button>' : '';
-        var approvedByHtml = sd.status === doneLabel && sd.approvedBy
-          ? '<span>' + doneLabel + ' by: <b>' + escapeHtml(sd.approvedBy) + '</b></span>' : '';
-        var approverLabel = sd.approver || (s.computedApprover ? 'Determined after PO Entry Stage' : 'No approver set for this project');
-        var extraFieldsHtml = (s.extra || []).map(function(ex) {
-          var val = sd[ex.key];
-          return val ? '<span>' + escapeHtml(ex.label) + ': <b>' + escapeHtml(val.toString()) + '</b></span>' : '';
-        }).join('');
-        return '<div class="stage-row">' +
-          '<div class="stage-name-col"><div class="stage-name">' + s.name + '</div>' +
-            '<div class="stage-approver">' + escapeHtml(approverLabel) + '</div></div>' +
-          '<div class="stage-dates">' +
-            '<span>Planned: <b>' + (sd.planned || '—') + '</b></span>' +
-            '<span>Actual: <b>' + (sd.actual || '—') + '</b></span>' +
-            delayHtml + approvedByHtml + extraFieldsHtml +
-            '<span class="pill ' + pillClass + '">' + sd.status + '</span>' +
-          '</div>' +
-          '<div class="stage-action">' + actionHtml + '</div>' +
-        '</div>';
-      }).join('');
-
-      return '<div class="req-card">' +
-        '<div class="req-header" onclick="toggleReq(' + req.srNo + ')">' +
-          '<div><div><span class="card-id-badge">#' + req.srNo + '</span><span class="card-project-tag">' + escapeHtml(req.project) + '</span> <span class="pill ' + (req.overallStatus === 'Done' ? 'done' : 'pending') + '">' + req.overallStatus + '</span></div>' +
-          '<div class="req-title">' + escapeHtml(req.materialName) + '</div>' +
-          (metaLine ? '<div class="req-sub">' + metaLine + '</div>' : '') +
-          '<div class="req-sub">By ' + escapeHtml(req.userEmail) + ' · ' + req.entryTimestamp +
-            (req.estimatedDeliveryDate ? ' · EDD: ' + req.estimatedDeliveryDate : '') +
-            (req.remarks ? ' · ' + escapeHtml(req.remarks) : '') + '</div></div>' +
-          '<div class="req-progress">' + doneCount + ' / ' + applicableStages.length + ' stages done</div>' +
+      var statusCls = req.cancelled ? 'cancelled' : (req.overallStatus === 'Done' ? 'done' : 'pending');
+      var statusTxt = req.cancelled ? 'Cancelled' : req.overallStatus;
+      var statusIco = req.overallStatus === 'Done' && !req.cancelled ? ico('check') : ico('clock');
+      return '<div class="pr-card' + (openPrCards[req.srNo] ? ' open' : '') + '" id="pr-card-' + req.srNo + '">' +
+        '<div class="pr-head" onclick="toggleReq(' + req.srNo + ')">' +
+          '<span class="pr-chev">' + ico('chevR') + '</span>' +
+          '<span class="pr-badge">#' + req.srNo + '</span>' +
+          '<div class="pr-main"><div class="pr-title">' + escapeHtml(req.materialName) + '<span class="pr-proj">' + escapeHtml(req.project) + '</span></div>' +
+            '<div class="pr-meta"><span>Requested on: <b>' + escapeHtml(req.entryTimestamp) + '</b></span>' +
+              (req.estimatedDeliveryDate ? '<span class="sep">|</span><span>EDD: <b>' + escapeHtml(req.estimatedDeliveryDate) + '</b></span>' : '') +
+              '<span class="sep">|</span><span>Requested By: <b>' + escapeHtml(req.userEmail) + '</b></span></div></div>' +
+          '<span class="pr-status ' + statusCls + '">' + statusIco + escapeHtml(statusTxt) + '</span>' +
         '</div>' +
-        '<div class="req-body" id="body-' + req.srNo + '">' + stageRows + '</div>' +
+        '<div class="pr-body" id="body-' + req.srNo + '">' +
+          '<div class="pr-sec"><div class="pr-sec-title">' + ico('info') + 'Request Information</div>' + requestInfoHtml(req) + '</div>' +
+          '<div class="pr-sec"><div class="pr-sec-title">' + ico('flow') + 'Approval Flow</div>' + flowStepperHtml(req) + flowTableHtml(req, true) + '</div>' +
+        '</div>' +
       '</div>';
     }
 
+    var openPrCards = {};
     function toggleReq(srNo) {
-      var body = document.getElementById('body-' + srNo);
-      if (body) body.classList.toggle('open');
+      var card = document.getElementById('pr-card-' + srNo);
+      if (card) { card.classList.toggle('open'); openPrCards[srNo] = card.classList.contains('open'); }
     }
 
     function startFlow(srNo) {
@@ -1965,18 +2129,59 @@
       var actionHtml = item.canAct
         ? '<button class="btn small" onclick="openModal(' + item.srNo + ', \'' + item.stageKey + '\')">Mark ' + doneLabel + '</button>'
         : '<span class="pill pending">' + item.status + '</span>';
-      return '<div class="queue-card' + (selected ? ' selected' : '') + '" id="queue-card-' + item.stageKey + '-' + item.srNo + '">' +
-        selectHtml + '<div class="queue-main">' +
-        '<div><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
-        '<div class="queue-title">' + escapeHtml(item.materialName) + '</div>' +
-        stageLine +
-        approverLine +
-        '<div class="queue-sub">Planned: ' + (item.planned || '—') +
-          (item.estimatedDeliveryDate ? ' · EDD: ' + item.estimatedDeliveryDate : '') + '</div>' +
-        buildMaterialDetailsHtml(item) +
+      var cardKey = item.stageKey + '-' + item.srNo;
+      var isOpen = !!openQueueCards[cardKey];
+      var tab = queueCardTab[cardKey] || 'details';
+      var full = requestBySrNo(item.srNo);
+      var flowPane = full
+        ? flowStepperHtml(full) + flowTableHtml(full, false)
+        : '<div class="empty-state">Loading approval flow...</div>';
+      var rightHtml = (waitingOnHtml || '') + (item.canAct
+        ? actionHtml
+        : '<span class="pr-status pending" style="padding:6px 12px; font-size:12.5px;">' + ico('clock') + 'Pending Approval</span>');
+      return '<div class="qc-card' + (selected ? ' selected' : '') + (isOpen ? ' open' : '') + '" id="queue-card-' + cardKey + '">' +
+        '<div class="qc-head" onclick="toggleQueueCard(event, \'' + cardKey + '\')">' +
+          selectHtml +
+          '<span class="qc-chev">' + ico('chevD') + '</span>' +
+          '<div class="qc-main">' +
+            '<div class="qc-tags"><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
+            '<div class="qc-title">' + escapeHtml(item.materialName) + '</div>' +
+            '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b>' +
+              (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + '</div>' +
+            '<div class="qc-sub">Planned: ' + escapeHtml(item.planned || '—') + (item.estimatedDeliveryDate ? ' &nbsp;|&nbsp; EDD: ' + escapeHtml(item.estimatedDeliveryDate) : '') + '</div>' +
+          '</div>' +
+          '<div class="qc-right">' + rightHtml + '</div>' +
         '</div>' +
-        '<div style="display:flex; flex-direction:column; align-items:flex-end;">' + waitingOnHtml + actionHtml + '</div>' +
+        '<div class="qc-body">' +
+          '<div class="qc-tabs">' +
+            '<button class="qc-tab' + (tab === 'details' ? ' active' : '') + '" onclick="setQueueTab(event, \'' + cardKey + '\', \'details\')">' + ico('doc') + 'Request Details</button>' +
+            '<button class="qc-tab' + (tab === 'flow' ? ' active' : '') + '" onclick="setQueueTab(event, \'' + cardKey + '\', \'flow\')">' + ico('flow') + 'Approval Flow</button>' +
+          '</div>' +
+          '<div class="qc-pane' + (tab === 'details' ? ' active' : '') + '" data-pane="details">' + buildMaterialDetailsHtml(item) + '</div>' +
+          '<div class="qc-pane' + (tab === 'flow' ? ' active' : '') + '" data-pane="flow" style="padding:0 0 10px;">' + flowPane + '</div>' +
+        '</div>' +
       '</div>';
+    }
+
+    var openQueueCards = {};
+    var queueCardTab = {};
+
+    function toggleQueueCard(ev, cardKey) {
+      // Clicks on the checkbox or the action button must not expand/collapse the card.
+      if (ev && ev.target && ev.target.closest && ev.target.closest('input, button, label, a')) return;
+      var card = document.getElementById('queue-card-' + cardKey);
+      if (!card) return;
+      card.classList.toggle('open');
+      openQueueCards[cardKey] = card.classList.contains('open');
+    }
+
+    function setQueueTab(ev, cardKey, tab) {
+      if (ev) ev.stopPropagation();
+      var card = document.getElementById('queue-card-' + cardKey);
+      if (!card) return;
+      queueCardTab[cardKey] = tab;
+      card.querySelectorAll('.qc-tab').forEach(function(b, i) { b.classList.toggle('active', (i === 0) === (tab === 'details')); });
+      card.querySelectorAll('.qc-pane').forEach(function(p) { p.classList.toggle('active', p.getAttribute('data-pane') === tab); });
     }
 
     function renderQueue(items) {

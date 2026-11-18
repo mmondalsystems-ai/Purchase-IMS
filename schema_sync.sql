@@ -292,7 +292,7 @@ begin
                where sr_no = p_sr_no and stage_key = v_sk;
             elsif v_field = 'delay_days' then
               if val = '' then val := null; end if;
-              update ims_request_stages set delay_days = val::integer
+              update ims_request_stages set delay_days = val::numeric
                where sr_no = p_sr_no and stage_key = v_sk;
             else
               -- stage specific extra field (indentNo, vendorName, poAmount, poNo, ...)

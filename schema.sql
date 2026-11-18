@@ -127,7 +127,7 @@ create table if not exists ims_request_stages (
   approver    text not null default '',
   planned_at  timestamptz,
   actual_at   timestamptz,
-  delay_days  integer,
+  delay_days  numeric(10,2),
   status      text not null,
   approved_by text not null default '',
   extras      jsonb not null default '{}'::jsonb,

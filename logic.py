@@ -76,6 +76,13 @@ def days_between(a: dt.datetime, b: dt.datetime) -> int:
     return (_as_tz(b).date() - _as_tz(a).date()).days
 
 
+def delay_days_between(actual: dt.datetime, planned: dt.datetime) -> float:
+    """Planned minus actual, in days with 2 decimals (time of day counts).
+    Approved AFTER the planned time -> negative (1 hour late = -0.04); on time or early -> 0 or positive."""
+    secs = (_as_tz(planned) - _as_tz(actual)).total_seconds()
+    return round(secs / 86400.0, 2)
+
+
 def _num(value):
     """Decimal/None -> int / float / '' so JSON looks like the sheet values did."""
     if value is None:
@@ -707,7 +714,7 @@ def _requests_impl(conn, current_user, is_admin, ctx):
                 "approver": approver_name,
                 "planned": fmt_dt(srow["planned_at"]) if srow else "",
                 "actual": fmt_dt(srow["actual_at"]) if srow else "",
-                "delay": (srow["delay_days"] if srow and srow["delay_days"] is not None else ""),
+                "delay": (_num(srow["delay_days"]) if srow and srow["delay_days"] is not None else ""),
                 "status": status,
                 "approvedBy": (srow["approved_by"] if srow else "") or "",
                 "canCurrentUserAct": bool(entry_status == "Done" and status != sv["done"] and prev_done and mine),
@@ -930,7 +937,7 @@ def _act_on_stage(user, payload):
             if ex["key"] in extra_fields:
                 extras[ex["key"]] = _clean_extra(ex["key"], extra_fields[ex["key"]])
 
-        delay = days_between(ts, planned_val) if planned_val else None
+        delay = delay_days_between(ts, planned_val) if planned_val else None
         conn.execute(
             "insert into ims_request_stages (sr_no, stage_key, approver, planned_at, actual_at, delay_days, status, approved_by, extras) "
             "values (%s,%s,%s,%s,%s,%s,%s,%s,%s) "
