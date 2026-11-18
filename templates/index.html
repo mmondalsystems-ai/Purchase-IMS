@@ -1814,18 +1814,13 @@
           return '<tr class="skip"><td>' + num + '</td><td><div class="fl-stage">' + escapeHtml(s.name) + '</div></td>' +
             '<td colspan="6"><span class="fl-pill skipped">Skipped</span></td>' + (withActions ? '<td></td>' : '') + '</tr>';
         }
-        if (!sd.isMyStage) {
-          return '<tr><td>' + num + '</td><td><div class="fl-stage">' + escapeHtml(s.name) + '</div></td>' +
-            '<td colspan="2" class="restricted-note">Restricted</td><td>—</td>' +
-            '<td><span class="fl-pill ' + (done ? 'done' : 'pending') + '">' + escapeHtml(sd.status || '') + '</span></td><td>—</td><td>—</td>' +
-            (withActions ? '<td></td>' : '') + '</tr>';
-        }
         var delayHtml = '—';
         if (sd.delay !== '' && sd.delay !== undefined && sd.delay !== null) {
           var d = Number(sd.delay);
           delayHtml = '<b class="' + (d < 0 ? 'delay-pos' : 'delay-neg') + '">' + d + ' d</b>';
         }
-        var extras = (s.extra || []).map(function(ex) {
+        // Stage details (vendor, PO amount, indent no ...) stay visible only to people who own that stage.
+        var extras = (!sd.isMyStage ? [] : (s.extra || [])).map(function(ex) {
           var val = sd[ex.key];
           return val ? '<div class="fl-extra">' + escapeHtml(ex.label) + ': <b>' + escapeHtml(val.toString()) + '</b></div>' : '';
         }).join('');
