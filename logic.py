@@ -721,11 +721,21 @@ def _requests_impl(conn, current_user, is_admin, ctx):
                 "approvedBy": (srow["approved_by"] if srow else "") or "",
                 "canCurrentUserAct": bool(entry_status == "Done" and status != sv["done"] and prev_done and mine),
                 "isMyStage": mine,
+                "canEdit": False,
+                "lockCore": False,
                 "_plannedDt": srow["planned_at"] if srow else None,
             }
             for ex in stage.get("extra", []):
                 sd[ex["key"]] = (srow["extras"].get(ex["key"]) if srow else "") or ""
             req["stages"][key] = sd
+        # PO Preparation details can be edited by its approver (or admin / backup) even after it is approved.
+        po_sd = req["stages"].get("poEntry")
+        if po_sd:
+            rate_row = req["stages"].get("rateApproval")
+            rate_done = bool(rate_row) and rate_row["status"] == status_values("rateApproval")["done"]
+            po_sd["canEdit"] = bool(entry_status == "Done" and not req["cancelled"] and po_sd["isMyStage"]
+                                    and po_sd["status"] == status_values("poEntry")["done"])
+            po_sd["lockCore"] = rate_done  # PO Amount / Advance Payment Required are fixed once Rate Approval is done
         out.append(req)
     return out
 
@@ -983,6 +993,76 @@ def db_json(value):
     return Jsonb(value)
 
 
+def _edit_po_entry(user, payload):
+    """Edit the PO Preparation Stage details after the stage is already approved."""
+    if not payload or not payload.get("srNo"):
+        raise UserError("Missing srNo.")
+    stage_def = STAGE_BY_KEY["poEntry"]
+    extra_fields = payload.get("extraFields") or {}
+    with db.connection() as conn:
+        req = conn.execute("select * from ims_requests where sr_no = %s for update", (payload["srNo"],)).fetchone()
+        if not req:
+            raise UserError("Request Sr No %s not found." % payload["srNo"])
+        if req["cancelled"]:
+            raise UserError("This request has been cancelled.")
+        ctx = _load_context(conn)
+        stages = {s["stage_key"]: s for s in conn.execute(
+            "select * from ims_request_stages where sr_no = %s for update", (req["sr_no"],)).fetchall()}
+        project, material_type = req["project"], req["material_type"]
+        this = stages.get("poEntry")
+        sv = status_values("poEntry")
+        if not this or this["status"] != sv["done"]:
+            raise UserError("PO Preparation Stage is not approved yet. Use Mark Approved first.")
+
+        _, _, current, is_admin = _identity(user, payload.get("asEmail"))
+        is_backup = current in get_access_emails(cfg.ACCESS_TYPES["backup"], project, "poEntry", ctx["access"], ctx["people"])
+        approver_name = (this["approver"] or "") or get_approver_name("poEntry", project, material_type, "", ctx["stage_cfg"])
+        approver_email = resolve_email(approver_name, ctx["people"]) if approver_name else ""
+        if not is_admin and not is_backup and not (approver_email and approver_email == current):
+            raise UserError("Only the PO Preparation approver (or an admin) can edit these details.")
+
+        for ex in stage_def.get("extra", []):
+            val = extra_fields.get(ex["key"])
+            if val is None or str(val).strip() == "":
+                raise UserError(ex["label"] + " is required.")
+        if extra_fields.get("advancePaymentRequired") not in ("Yes", "No"):
+            raise UserError("Advance Payment Required must be explicitly set to Yes or No.")
+
+        old = dict(this["extras"] or {})
+        new = dict(old)
+        for ex in stage_def.get("extra", []):
+            new[ex["key"]] = _clean_extra(ex["key"], extra_fields[ex["key"]])
+
+        rate = stages.get("rateApproval")
+        rate_done = bool(rate) and rate["status"] == status_values("rateApproval")["done"]
+        if rate_done and (str(new.get("poAmount", "")) != str(old.get("poAmount", ""))
+                          or new.get("advancePaymentRequired") != old.get("advancePaymentRequired")):
+            raise UserError("PO Amount and Advance Payment Required cannot be changed after Rate Approval is done.")
+
+        conn.execute("update ims_request_stages set extras = %s where sr_no = %s and stage_key = 'poEntry'",
+                     (db_json(new), req["sr_no"]))
+        # A new PO amount can change who must give Rate Approval (only while that stage is still pending).
+        if not rate_done and str(new.get("poAmount", "")) != str(old.get("poAmount", "")):
+            rate_name = get_approver_name("rateApproval", project, material_type, new.get("poAmount", ""), ctx["stage_cfg"])
+            conn.execute(
+                "insert into ims_request_stages (sr_no, stage_key, approver, status) values (%s,'rateApproval',%s,%s) "
+                "on conflict (sr_no, stage_key) do update set approver = excluded.approver",
+                (req["sr_no"], rate_name or "", status_values("rateApproval")["pending"]),
+            )
+        log.info("PO Preparation details of request %s edited by %s", req["sr_no"], current)
+
+
+def imsApprovalEditPoEntry(user, payload):
+    try:
+        _edit_po_entry(user, payload)
+        return {"success": True}
+    except UserError as err:
+        return {"success": False, "error": str(err)}
+    except Exception:
+        log.exception("imsApprovalEditPoEntry failed")
+        return {"success": False, "error": "Server error while saving. Please try again."}
+
+
 def imsApprovalActOnStage(user, payload):
     try:
         _act_on_stage(user, payload)
@@ -1129,6 +1209,7 @@ API = {
     "imsApprovalGetMyQueue": (imsApprovalGetMyQueue, True),
     "imsApprovalGetMyStageKeys": (imsApprovalGetMyStageKeys, True),
     "imsApprovalActOnStage": (imsApprovalActOnStage, True),
+    "imsApprovalEditPoEntry": (imsApprovalEditPoEntry, True),
     "imsApprovalActOnStages": (imsApprovalActOnStages, True),
     "imsApprovalActOnStagesWithSharedFields": (imsApprovalActOnStagesWithSharedFields, True),
     "imsApprovalCancelRequest": (imsApprovalCancelRequest, True),

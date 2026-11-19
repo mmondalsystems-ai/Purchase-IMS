@@ -202,7 +202,18 @@ def main():
     check(not notr["success"] and "Payment Terms is required" in notr["error"], "Payment Terms is required")
     check(call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "poEntry", "extraFields":
           {"vendorName": "ABC", "poAmount": "1000", "poNo": "P3", "paymentTerms": "Net 30", "advancePaymentRequired": "No"}})["success"], "sr3 poEntry")
+    print("Edit PO Preparation details")
+    pe = {"vendorName": "ABC", "poAmount": "2000", "poNo": "P3-EDIT", "paymentTerms": "Net 45", "advancePaymentRequired": "No"}
+    check(not call(chinmoy, "imsApprovalEditPoEntry", {"srNo": sr3, "extraFields": pe})["success"], "non-approver cannot edit PO details")
+    miss = call(admin, "imsApprovalEditPoEntry", {"srNo": sr3, "extraFields": dict(pe, poNo="")})
+    check(not miss["success"] and "PO No is required" in miss["error"], "edit needs every field")
+    check(call(admin, "imsApprovalEditPoEntry", {"srNo": sr3, "extraFields": pe})["success"], "approver/admin can edit PO details after approval")
+    ed = next(r for r in call(admin, "imsApprovalGetRequests") if r["srNo"] == sr3)["stages"]["poEntry"]
+    check(ed["poNo"] == "P3-EDIT" and ed["poAmount"] == 2000 and ed["canEdit"] and not ed["lockCore"], "edited values saved and canEdit set")
     check(call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "rateApproval", "extraFields": {}})["success"], "sr3 rateApproval")
+    lock = call(admin, "imsApprovalEditPoEntry", {"srNo": sr3, "extraFields": dict(pe, poAmount="9999")})
+    check(not lock["success"] and "after Rate Approval" in lock["error"], "PO Amount locked after Rate Approval")
+    check(call(admin, "imsApprovalEditPoEntry", {"srNo": sr3, "extraFields": dict(pe, poNo="P3-LATE")})["success"], "other PO fields still editable after Rate Approval")
     out_of_order = call(admin, "imsApprovalActOnStage", {"srNo": sr3, "stageKey": "grn", "extraFields": {}})
     check(not out_of_order["success"] and "Previous stage" in out_of_order["error"], "stages cannot be skipped")
 
