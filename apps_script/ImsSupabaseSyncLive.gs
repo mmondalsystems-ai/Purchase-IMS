@@ -87,6 +87,37 @@ function ImsSupabaseSync_setupLive() {
   ss.toast('Live sync is set up. Check the SYNC_MAP tab, then use IMS Sync > Pull ALL once.', 'IMS Sync', 10);
 }
 
+/**
+ * Replaces the dropdown (data validation) of the "Material Type" column on the tracker tab with the
+ * six current Material Types plus the old "HO" value. Only the validation rule of that column is
+ * changed (rows 2 to the last row); no cell value is edited, cleared or deleted.
+ * Run it once from the Apps Script editor or from the IMS Sync menu, then run "Pull ALL rows".
+ */
+function ImsSupabaseSync_fixMaterialTypeValidation() {
+  var sheet = ImsSupabaseSync_trackerSheet_(false);
+  if (!sheet) throw new Error('Tracker tab not found: ' + ImsSupabaseSync_trackerName_());
+  var lastCol = sheet.getLastColumn();
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var col = 0;
+  for (var i = 0; i < headers.length; i++) {
+    if (ImsSupabaseSync_normHeader_(headers[i]) === 'materialtype') { col = i + 1; break; }
+  }
+  if (!col) throw new Error('Material Type header was not found in row 1.');
+
+  var allowed = [
+    'SITE MATERIAL', 'IT MATERIAL', 'HR & ADMIN MATERIAL',
+    'SALES & MARKETING MATERIAL', 'ACCOUNTS MATERIAL', 'LEGAL MATERIAL', 'HO'
+  ];
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(allowed, true)
+    .setAllowInvalid(true)
+    .build();
+  var rows = Math.max(sheet.getMaxRows() - 1, 1);
+  sheet.getRange(2, col, rows, 1).setDataValidation(rule);
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    'Material Type dropdown updated (column ' + col + '). Now run IMS Sync > Pull ALL rows.', 'IMS Sync', 10);
+}
+
 /** Installable onOpen trigger: adds the IMS Sync menu. */
 function ImsSupabaseSync_onOpen() {
   SpreadsheetApp.getUi().createMenu('IMS Sync')
@@ -98,6 +129,7 @@ function ImsSupabaseSync_onOpen() {
     .addItem('Push masters (overwrite Remaining)', 'ImsSupabaseSync_pushMastersOverwriteRemaining')
     .addSeparator()
     .addItem('Rebuild SYNC_MAP from headers', 'ImsSupabaseSync_rebuildMap')
+    .addItem('Fix Material Type dropdown', 'ImsSupabaseSync_fixMaterialTypeValidation')
     .addItem('Set up live sync (triggers)', 'ImsSupabaseSync_setupLive')
     .addToUi();
 }
