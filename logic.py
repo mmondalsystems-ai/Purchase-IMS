@@ -286,6 +286,20 @@ def get_access_emails(access_type, project, stage_key, access_cfg, people_map) -
     return out
 
 
+def approval_by_material_type(stage_cfg) -> dict:
+    """{MATERIAL TYPE (upper): approver}. Stage Config sheet (Approval Stage row, one column per
+    material type) wins; config.py holds the defaults used when the sheet cell is empty."""
+    out = dict(cfg.APPROVAL_STAGE_BY_MATERIAL_TYPE)
+    entry = (stage_cfg or {}).get("approval")
+    if entry:
+        for key, val in entry["byProject"].items():
+            k = str(key or "").strip().upper()
+            if k in out or k.endswith(" MATERIAL"):
+                if (val or "").strip():
+                    out[k] = val.strip()
+    return out
+
+
 def get_approver_name(stage_key, project, material_type, po_amount, stage_cfg) -> str:
     stage = STAGE_BY_KEY.get(stage_key)
     if not stage:
@@ -300,10 +314,16 @@ def get_approver_name(stage_key, project, material_type, po_amount, stage_cfg) -
         if amt != amt:  # NaN
             return ""
         mt = str(material_type or "").strip().upper()
+        if mt != "SITE MATERIAL":
+            mt = "HO"  # every head-office material type (IT, HR & Admin, Sales, Accounts, Legal, old HO) uses the HO rules
         for rule in cfg.RATE_APPROVAL_RULES:
             if rule["materialType"] == mt and amt <= rule["maxAmount"]:
                 return rule["approver"]
         return ""
+    if stage_key == "approval":
+        by_type = approval_by_material_type(stage_cfg).get(str(material_type or "").strip().upper())
+        if by_type:
+            return by_type
     entry = stage_cfg.get(stage_key)
     if not entry:
         return ""
@@ -698,8 +718,12 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             key = stage["key"]
             srow = stage_data.get(key)
             approver_name = (srow["approver"] if srow else "") or ""
-            if not approver_name and entry_status == "Done":
-                approver_name = get_approver_name(key, project, material_type, po_amount, ctx["stage_cfg"])
+            stage_done = bool(srow) and srow["status"] == status_values(key)["done"]
+            if entry_status == "Done" and (not approver_name or not stage_done):
+                # Pending stages follow the Stage Config sheet right away (a changed name changes who can approve).
+                live_name = get_approver_name(key, project, material_type, po_amount, ctx["stage_cfg"])
+                if live_name or not approver_name:
+                    approver_name = live_name
             approver_email = resolve_email(approver_name, ctx["people"])
             sv = status_values(key)
             status = (srow["status"] if srow else "") or sv["pending"]
@@ -848,6 +872,10 @@ def imsApprovalGetMyStageKeys(user, asEmail=None):
             entry = ctx["stage_cfg"].get(stage["key"])
             if entry:
                 for approver in entry["byProject"].values():
+                    if current in resolve_emails(approver, ctx["people"]):
+                        assigned = True
+            if stage["key"] == "approval":
+                for approver in approval_by_material_type(ctx["stage_cfg"]).values():
                     if current in resolve_emails(approver, ctx["people"]):
                         assigned = True
         if not assigned:

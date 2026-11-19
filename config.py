@@ -54,7 +54,21 @@ RATE_APPROVAL_RULES = [
     {"materialType": "HO", "maxAmount": INF, "approver": "Managing Director"},
 ]
 
-MATERIAL_TYPES = ["SITE MATERIAL", "HO"]
+MATERIAL_TYPES = [
+    "SITE MATERIAL", "IT MATERIAL", "HR & ADMIN MATERIAL",
+    "SALES & MARKETING MATERIAL", "ACCOUNTS MATERIAL", "LEGAL MATERIAL",
+]
+
+# Approval Stage approver is decided by Material Type (not by project).
+# "HO" is the old material type of earlier entries; it keeps using the project-wise Stage Config approver.
+APPROVAL_STAGE_BY_MATERIAL_TYPE = {
+    "SITE MATERIAL": "Bikash Haldar",
+    "IT MATERIAL": "Deepan Mukherjee",
+    "HR & ADMIN MATERIAL": "Bondita Phukon",
+    "SALES & MARKETING MATERIAL": "Purbasha Mukherjee Chakraborty",
+    "ACCOUNTS MATERIAL": "Amar Sharma",
+    "LEGAL MATERIAL": "Abhradeep Sinha",
+}
 
 ACCESS_TYPES = {
     "newEntry": "New Entry Permission",
