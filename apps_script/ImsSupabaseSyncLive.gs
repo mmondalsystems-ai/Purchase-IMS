@@ -113,9 +113,19 @@ function ImsSupabaseSync_fixMaterialTypeValidation() {
     .setAllowInvalid(true)
     .build();
   var rows = Math.max(sheet.getMaxRows() - 1, 1);
-  sheet.getRange(2, col, rows, 1).setDataValidation(rule);
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    'Material Type dropdown updated (column ' + col + '). Now run IMS Sync > Pull ALL rows.', 'IMS Sync', 10);
+  var target = sheet.getRange(2, col, rows, 1);
+  target.clearDataValidations();   // remove the old rule first (only the rule, never the cell values)
+  target.setDataValidation(rule);
+  SpreadsheetApp.flush();
+
+  // Read the rule back from the problem row and report it.
+  var checkRow = Math.min(133, sheet.getMaxRows());
+  var back = sheet.getRange(checkRow, col).getDataValidation();
+  var values = back && back.getCriteriaValues() && back.getCriteriaValues()[0];
+  var msg = 'Tracker tab "' + sheet.getName() + '", column ' + col + ', row ' + checkRow + ' now allows: ' +
+    (values ? values.join(', ') : 'NO RULE');
+  ImsSupabaseSync_log_('INFO', 'Material Type dropdown fix: ' + msg);
+  SpreadsheetApp.getActiveSpreadsheet().toast(msg + '. Now run IMS Sync > Pull ALL rows.', 'IMS Sync', 15);
 }
 
 /** Installable onOpen trigger: adds the IMS Sync menu. */
