@@ -264,12 +264,16 @@ def read_access_config(conn) -> dict:
     return out
 
 
-def get_access_emails(access_type, project, stage_key, access_cfg, people_map) -> list:
+def get_access_emails(access_type, project, stage_key, access_cfg, people_map, material_type="") -> list:
     type_ = normalize_access_type(access_type)
     stage = normalize_access_stage_key(stage_key)
     projects = []
     if project:
         projects.append(normalize_access_project(project))
+    if material_type and stage == "approval":
+        # Approval Stage is decided by Material Type, so a Backup Approver row may name the Material Type
+        # (e.g. "IT MATERIAL") in its Project(s) column.
+        projects.append(normalize_access_project(material_type))
     projects.append("ALL")
     stages = [stage]
     if stage.lower() != "all":
@@ -659,10 +663,10 @@ def _requests_impl(conn, current_user, is_admin, ctx):
 
     backup_cache = {}
 
-    def backup_emails(project, stage_key):
-        k = (project, stage_key)
+    def backup_emails(project, stage_key, material_type=""):
+        k = (project, stage_key, material_type if stage_key == "approval" else "")
         if k not in backup_cache:
-            backup_cache[k] = get_access_emails(cfg.ACCESS_TYPES["backup"], project, stage_key, ctx["access"], ctx["people"])
+            backup_cache[k] = get_access_emails(cfg.ACCESS_TYPES["backup"], project, stage_key, ctx["access"], ctx["people"], material_type)
         return backup_cache[k]
 
     cancel_cache = {}
@@ -727,7 +731,7 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             approver_email = resolve_email(approver_name, ctx["people"])
             sv = status_values(key)
             status = (srow["status"] if srow else "") or sv["pending"]
-            is_backup = current_user in backup_emails(project, key)
+            is_backup = current_user in backup_emails(project, key, material_type)
 
             prev_key = get_prev_stage_key(key, adv_for_gating)
             prev_done = True
@@ -879,7 +883,7 @@ def imsApprovalGetMyStageKeys(user, asEmail=None):
                     if current in resolve_emails(approver, ctx["people"]):
                         assigned = True
         if not assigned:
-            for proj in cfg.PROJECTS:
+            for proj in list(cfg.PROJECTS) + list(cfg.MATERIAL_TYPES):
                 if current in get_access_emails(cfg.ACCESS_TYPES["backup"], proj, stage["key"], ctx["access"], ctx["people"]):
                     assigned = True
         if assigned:
@@ -932,7 +936,7 @@ def _act_on_stage(user, payload):
         approver_name = get_approver_name(stage_key, project, material_type, po_for_approver, ctx["stage_cfg"])
 
         _, _, current, is_admin = _identity(user, payload.get("asEmail"))
-        is_backup = current in get_access_emails(cfg.ACCESS_TYPES["backup"], project, stage_key, ctx["access"], ctx["people"])
+        is_backup = current in get_access_emails(cfg.ACCESS_TYPES["backup"], project, stage_key, ctx["access"], ctx["people"], material_type)
         if not approver_name and not is_admin and not is_backup:
             raise UserError('No approver configured for "' + stage_def["name"] + '" for this request yet.')
         approver_email = resolve_email(approver_name, ctx["people"]) if approver_name else ""
@@ -1199,6 +1203,9 @@ def imsApprovalCancelRequest(user, payload):
                 "update ims_requests set cancelled = true, cancelled_by = %s, cancelled_at = %s, cancel_reason = %s where sr_no = %s",
                 (current, cancel_date, reason, req["sr_no"]),
             )
+            # A cancelled request has no schedule any more: clear every planned date.
+            # Actual dates, delays, statuses and approvers stay as they were.
+            conn.execute("update ims_request_stages set planned_at = null where sr_no = %s", (req["sr_no"],))
 
             qty_synced, remaining_after = False, None
             if req["planned"] == "Planned" and req["quantity"] and req["quantity"] > 0:
