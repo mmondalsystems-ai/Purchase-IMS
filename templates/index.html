@@ -781,7 +781,7 @@
     .qc-card.open .qc-chev { transform:rotate(180deg); }
     .filter-bar { display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
     .filter-bar .field { margin-bottom:0; }
-    .filter-bar .filter-search { margin-left:auto; width:360px; max-width:100%; }
+    .filter-bar .filter-search { width:360px; max-width:100%; }
     .filter-bar .filter-search input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:#fff; }
     .qc-main { flex:1; min-width:0; }
     .qc-mid { flex:0 0 auto; min-width:190px; max-width:260px; display:flex; flex-direction:column; gap:6px; padding:0 14px; font-size:13px; color:#475569; }
@@ -2192,10 +2192,6 @@
             '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b>' +
               (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + '</div>' +
             '<div class="qc-sub">Planned: ' + escapeHtml(item.planned || '—') + (item.estimatedDeliveryDate ? ' &nbsp;|&nbsp; EDD: ' + escapeHtml(item.estimatedDeliveryDate) : '') + '</div>' +
-          '</div>' +
-          '<div class="qc-mid">' +
-            '<div>Task: <b>' + escapeHtml(item.taskName || '—') + '</b></div>' +
-            '<div>Qty: <b>' + escapeHtml(((item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? item.quantity : '—') + (item.uom ? ' ' + item.uom : '')) + '</b></div>' +
           '</div>' +
           '<div class="qc-right">' + rightHtml + '</div>' +
         '</div>' +
