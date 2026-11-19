@@ -1841,8 +1841,8 @@
           var d = Number(sd.delay);
           delayHtml = '<b class="' + (d < 0 ? 'delay-pos' : 'delay-neg') + '">' + d + ' d</b>';
         }
-        // Stage details (vendor, PO amount, indent no ...) stay visible only to people who own that stage.
-        var extras = (!sd.isMyStage ? [] : (s.extra || [])).map(function(ex) {
+        // Stage details (indent no, remarks, vendor, PO amount ...) are visible to every user (view only).
+        var extras = (s.extra || []).map(function(ex) {
           var val = sd[ex.key];
           return val ? '<div class="fl-extra">' + escapeHtml(ex.label) + ': <b>' + escapeHtml(val.toString()) + '</b></div>' : '';
         }).join('');
