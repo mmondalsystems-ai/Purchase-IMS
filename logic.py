@@ -71,6 +71,20 @@ def add_days(value: dt.datetime, days: int) -> dt.datetime:
     return _as_tz(value) + dt.timedelta(days=days)
 
 
+def skip_sunday(value: dt.datetime) -> dt.datetime:
+    """No planned date falls on a Sunday: a Sunday moves to the Monday (time of day is kept)."""
+    value = _as_tz(value)
+    if value.weekday() == 6:
+        value = value + dt.timedelta(days=1)
+    return value
+
+
+def planned_after(value: dt.datetime, days: int) -> dt.datetime:
+    """Planned date = value + days, moved to Monday when it lands on a Sunday.
+    Later stages are counted from the moved date, so the whole flow shifts with it."""
+    return skip_sunday(add_days(value, days))
+
+
 def days_between(a: dt.datetime, b: dt.datetime) -> int:
     """Whole days from a to b, by calendar date (same as imsApprovalDaysBetween_)."""
     return (_as_tz(b).date() - _as_tz(a).date()).days
@@ -489,7 +503,7 @@ def _initialize_stages(conn, sr_no, project, material_type, base_ts, stage_cfg):
             r["approver"] = get_approver_name(stage["key"], project, material_type, "", stage_cfg)
         rows[stage["key"]] = r
 
-    approval_planned = add_days(base_ts, 1)
+    approval_planned = planned_after(base_ts, 1)
     rows["approval"]["planned_at"] = approval_planned
     prev_planned = approval_planned
     po_prep_planned = None  # PO Preparation Stage (poEntry): Delivery planned = this + 15 days
@@ -498,11 +512,11 @@ def _initialize_stages(conn, sr_no, project, material_type, base_ts, stage_cfg):
         if key == "advancePayment":
             continue  # set later, only if actually required
         if key == "delivery":
-            planned = add_days(po_prep_planned, 15)
+            planned = planned_after(po_prep_planned, 15)
         elif key == "poEntry":
-            planned = add_days(prev_planned, 3)  # PO Rate -> PO Preparation: 3 days gap
+            planned = planned_after(prev_planned, 3)  # PO Rate -> PO Preparation: 3 days gap
         else:
-            planned = add_days(prev_planned, 1)
+            planned = planned_after(prev_planned, 1)
         rows[key]["planned_at"] = planned
         if key == "poEntry":
             po_prep_planned = planned
@@ -1009,7 +1023,7 @@ def _act_on_stage(user, payload):
         # Once Rate Approval itself is completed, set Advance Payment's planned date (its planned + 1).
         if stage_key == "rateApproval":
             if adv_now == "Yes":
-                adv_planned = add_days(planned_val, 1) if planned_val else add_days(ts, 1)
+                adv_planned = planned_after(planned_val, 1) if planned_val else planned_after(ts, 1)
                 conn.execute(
                     "insert into ims_request_stages (sr_no, stage_key, planned_at, status) values (%s,'advancePayment',%s,%s) "
                     "on conflict (sr_no, stage_key) do update set planned_at = excluded.planned_at",
