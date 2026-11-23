@@ -1305,6 +1305,15 @@ def _parse_amount(text):
     return _parse_amount_ex(text)[0]
 
 
+# In the Non Planned report these projects are shown together as one group; every other project stays separate.
+REPORT_COMBINED_PROJECTS = ("HO", "Orchard Amritaya")
+REPORT_COMBINED_LABEL = "HO + Orchard Amritaya"
+
+
+def _report_group(project):
+    return REPORT_COMBINED_LABEL if project in REPORT_COMBINED_PROJECTS else project
+
+
 def _non_planned_report(user, payload, as_email=None):
     _report_user(user, as_email)
     payload = payload or {}
@@ -1324,13 +1333,18 @@ def _non_planned_report(user, payload, as_email=None):
         "  and (r.entry_timestamp at time zone %s)::date between %s and %s "
     )
     params = [str(cfg.APP_TZ), d_from, d_to]
-    if project:
+    if project == REPORT_COMBINED_LABEL:
+        sql += "and r.project = any(%s) "
+        params.append(list(REPORT_COMBINED_PROJECTS))
+    elif project:
         sql += "and r.project = %s "
         params.append(project)
-    sql += "order by r.project, r.entry_timestamp, r.sr_no"
+    sql += "order by r.entry_timestamp, r.sr_no"
 
     with db.connection() as conn:
         rows = conn.execute(sql, params).fetchall()
+    # Groups in A-Z order; inside a group the rows stay in date order (the query already sorted them).
+    rows = sorted(rows, key=lambda r: _report_group(r["project"]))
 
     projects, by_project, seen_po, unparsed, recovered_count = [], {}, set(), 0, 0
     grand = Decimal(0)
@@ -1339,7 +1353,8 @@ def _non_planned_report(user, payload, as_email=None):
         po_no = str(extras.get("poNo") or "").strip()
         amount_text = str(extras.get("poAmount") or "").strip()
         amount, shown_text, recovered = None, "", False
-        key = (r["project"], po_no.upper())
+        group_name = _report_group(r["project"])
+        key = (group_name, po_no.upper())
         # A PO's value is shown once (first row of that PO); the other rows of the same PO show the PO No only.
         if po_no and key not in seen_po:
             seen_po.add(key)
@@ -1352,10 +1367,10 @@ def _non_planned_report(user, payload, as_email=None):
         elif not po_no:
             pass
 
-        group = by_project.get(r["project"])
+        group = by_project.get(group_name)
         if group is None:
-            group = {"project": r["project"], "rows": [], "total": Decimal(0)}
-            by_project[r["project"]] = group
+            group = {"project": group_name, "rows": [], "total": Decimal(0)}
+            by_project[group_name] = group
             projects.append(group)
         if amount is not None:
             group["total"] += amount
