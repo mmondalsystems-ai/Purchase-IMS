@@ -1254,18 +1254,55 @@ def imsReportAccess(user, asEmail=None):
     return current in cfg.REPORT_EMAILS
 
 
-def _parse_amount(text):
-    """'50,000', 'Rs 50000/-', '\u20b950000' -> Decimal. Anything else (letters, two dots) -> None."""
+_SHEET_DATE_RE = re.compile(r"^(\d{4,6})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$")
+
+
+def _days_from_civil(y, m, d):
+    """Days since 1970-01-01 for any year (works beyond year 9999, unlike datetime)."""
+    y -= 1 if m <= 2 else 0
+    era = (y if y >= 0 else y - 399) // 400
+    yoe = y - era * 400
+    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+
+
+def _amount_from_sheet_date(text):
+    """When the Google Sheet cell of PO Amount was formatted as a date, the sync stored the number as a
+    date text such as '2556-05-25 12:00:00'. A sheet date is just a number of days since 1899-12-30,
+    so the original amount is that number of days (the time part is the decimals)."""
+    m = _SHEET_DATE_RE.match(text)
+    if not m:
+        return None
+    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if y < 1900 or not (1 <= mo <= 12) or not (1 <= d <= 31):
+        return None
+    secs = int(m.group(4) or 0) * 3600 + int(m.group(5) or 0) * 60 + int(m.group(6) or 0)
+    days = _days_from_civil(y, mo, d) - _days_from_civil(1899, 12, 30)
+    return (Decimal(days * 86400 + secs) / Decimal(86400)).quantize(Decimal("0.01"))
+
+
+def _parse_amount_ex(text):
+    """Returns (amount or None, recovered_from_date: bool).
+    '50,000', 'Rs 50000/-' -> Decimal. A date-looking text is converted back to the number (see above).
+    Anything else (letters, two dots) -> (None, False)."""
     s = str(text or "").strip()
     if not s:
-        return None
+        return None, False
+    from_date = _amount_from_sheet_date(s)
+    if from_date is not None:
+        return from_date, True
     s = re.sub(r"(?i)\brs\.?|\binr\b|\u20b9|/-", "", s).replace(",", "").strip()
     if not re.fullmatch(r"-?\d+(\.\d+)?", s):
-        return None
+        return None, False
     try:
-        return Decimal(s)
+        return Decimal(s), False
     except InvalidOperation:
-        return None
+        return None, False
+
+
+def _parse_amount(text):
+    return _parse_amount_ex(text)[0]
 
 
 def _non_planned_report(user, payload, as_email=None):
@@ -1295,18 +1332,20 @@ def _non_planned_report(user, payload, as_email=None):
     with db.connection() as conn:
         rows = conn.execute(sql, params).fetchall()
 
-    projects, by_project, seen_po, unparsed = [], {}, set(), 0
+    projects, by_project, seen_po, unparsed, recovered_count = [], {}, set(), 0, 0
     grand = Decimal(0)
     for r in rows:
         extras = r["extras"] or {}
         po_no = str(extras.get("poNo") or "").strip()
         amount_text = str(extras.get("poAmount") or "").strip()
-        amount, shown_text = None, ""
+        amount, shown_text, recovered = None, "", False
         key = (r["project"], po_no.upper())
         # A PO's value is shown once (first row of that PO); the other rows of the same PO show the PO No only.
         if po_no and key not in seen_po:
             seen_po.add(key)
-            amount = _parse_amount(amount_text)
+            amount, recovered = _parse_amount_ex(amount_text)
+            if recovered:
+                recovered_count += 1
             if amount is None and amount_text:
                 shown_text = amount_text
                 unparsed += 1
@@ -1333,11 +1372,13 @@ def _non_planned_report(user, payload, as_email=None):
             "qty": (str(qty) + (" " + r["uom"] if r["uom"] else "")).strip() if qty != "" else (r["uom"] or ""),
             "amount": float(amount) if amount is not None else None,
             "amountText": shown_text,
+            "amountRecovered": recovered,
         })
     for g in projects:
         g["total"] = float(g["total"])
     return {"fromDate": d_from.isoformat(), "toDate": d_to.isoformat(), "projects": projects,
-            "grandTotal": float(grand), "rowCount": len(rows), "unparsedCount": unparsed}
+            "grandTotal": float(grand), "rowCount": len(rows), "unparsedCount": unparsed,
+            "recoveredCount": recovered_count}
 
 
 def imsReportNonPlanned(user, payload, asEmail=None):
@@ -1345,48 +1386,6 @@ def imsReportNonPlanned(user, payload, asEmail=None):
         return {"success": True, "report": _non_planned_report(user, payload, asEmail)}
     except UserError as err:
         return {"success": False, "error": str(err)}
-
-
-def non_planned_report_xlsx(user, payload):
-    """Same data as the on-screen report, as an Excel file (bytes)."""
-    import io
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-
-    report = _non_planned_report(user, payload)
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Non Planned Report"
-    headers = ["DATE", "Project", "Point of Usage", "Task Name", "PARTICULARS", "PO No", "QTY", "AMT"]
-    ws.append(headers)
-    head_fill = PatternFill("solid", fgColor="1F3A5F")
-    for c in ws[1]:
-        c.font = Font(bold=True, color="FFFFFF")
-        c.fill = head_fill
-        c.alignment = Alignment(vertical="center")
-    money = '#,##0.00'
-    for g in report["projects"]:
-        for row in g["rows"]:
-            amt = row["amount"] if row["amount"] is not None else (row["amountText"] or None)
-            ws.append([row["date"], row["project"], row["pointOfUsage"], row["taskName"],
-                       row["particulars"], row["poNo"], row["qty"], amt])
-            if isinstance(amt, float):
-                ws.cell(row=ws.max_row, column=8).number_format = money
-        ws.append(["", g["project"] + " - Total", "", "", "", "", "", g["total"]])
-        for c in ws[ws.max_row]:
-            c.font = Font(bold=True)
-            c.fill = PatternFill("solid", fgColor="E8EEF7")
-        ws.cell(row=ws.max_row, column=8).number_format = money
-    ws.append(["", "GRAND TOTAL", "", "", "", "", "", report["grandTotal"]])
-    for c in ws[ws.max_row]:
-        c.font = Font(bold=True)
-    ws.cell(row=ws.max_row, column=8).number_format = money
-    for col, width in zip("ABCDEFGH", [14, 20, 28, 34, 40, 18, 14, 16]):
-        ws.column_dimensions[col].width = width
-    ws.freeze_panes = "A2"
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------

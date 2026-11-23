@@ -524,6 +524,25 @@
     .rep-table td { padding:8px 10px; border-top:1px solid var(--border); vertical-align:top; }
     .rep-table td.num, .rep-table th.num { text-align:right; white-space:nowrap; }
     .rep-table tr.rep-total td { background:#e8eef7; font-weight:700; }
+    .rep-print-header { display:none; }
+    @media print {
+      @page { size: A4 landscape; margin: 10mm; }
+      body.printing-report #sidebar, body.printing-report #topbar, body.printing-report .page-header,
+      body.printing-report .filter-bar, body.printing-report #repMsg { display:none !important; }
+      body.printing-report .page { display:none !important; }
+      body.printing-report #page-nonPlannedReport { display:block !important; animation:none; }
+      body.printing-report #app, body.printing-report #main { display:block; min-height:0; }
+      body.printing-report #content { padding:0; max-width:none; }
+      body.printing-report .rep-print-header { display:block; margin-bottom:8px; font-size:12px; }
+      body.printing-report .rep-print-title { font-size:18px; font-weight:700; }
+      body.printing-report .rep-wrap { border:1px solid #999; overflow:visible; border-radius:0; }
+      body.printing-report .rep-table { font-size:10.5px; }
+      body.printing-report .rep-table th { background:#1f3a5f !important; color:#fff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      body.printing-report .rep-table tr.rep-total td { background:#e8eef7 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      body.printing-report .rep-table thead { display:table-header-group; }
+      body.printing-report .rep-table tr { page-break-inside:avoid; }
+      body.printing-report .rep-group-title { break-after:avoid; }
+    }
     .cancel-details { margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; color:#7f1d1d; display:flex; flex-wrap:wrap; gap:6px 24px; }
     .cancel-details .cancel-label { font-weight:700; color:#b91c1c; margin-right:6px; }
     .req-header, .stage-section-header {
@@ -1042,9 +1061,10 @@
               <select id="repProject"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
             </div>
             <div class="field"><button class="btn" id="repGenerateBtn" onclick="generateNonPlannedReport()">Generate</button></div>
-            <div class="field"><button class="btn outline" id="repDownloadBtn" onclick="downloadNonPlannedReport()" disabled>Download Excel</button></div>
+            <div class="field"><button class="btn outline" id="repPrintBtn" onclick="printNonPlannedReport()" disabled>Print</button></div>
           </div>
           <div class="msg" id="repMsg"></div>
+          <div id="repPrintHeader" class="rep-print-header"></div>
           <div id="repResult"></div>
         </div>
 
@@ -2462,7 +2482,7 @@
     function generateNonPlannedReport() {
       var f = reportFilters(), msg = document.getElementById('repMsg'), box = document.getElementById('repResult');
       msg.className = 'msg'; msg.textContent = '';
-      document.getElementById('repDownloadBtn').disabled = true;
+      document.getElementById('repPrintBtn').disabled = true;
       box.innerHTML = '<div class="spinner"></div>';
       google.script.run
         .withSuccessHandler(function(res) {
@@ -2477,25 +2497,33 @@
       var box = document.getElementById('repResult');
       if (!rep.projects.length) { box.innerHTML = '<div class="empty-state">No Non Planned requests in this date range.</div>'; return; }
       var html = '<div class="req-sub" style="margin-bottom:6px;">' + rep.rowCount + ' item(s) &middot; Grand Total: <b>' + repMoney(rep.grandTotal) + '</b>' +
-        (rep.unparsedCount ? ' &middot; <span style="color:#b91c1c;">' + rep.unparsedCount + ' PO amount(s) are not a plain number and are not in the total</span>' : '') + '</div>';
+        (rep.unparsedCount ? ' &middot; <span style="color:#b91c1c;">' + rep.unparsedCount + ' PO amount(s) are not a plain number and are not in the total</span>' : '') +
+        (rep.recoveredCount ? '<br>* ' + rep.recoveredCount + ' amount(s) were saved as a date by the sheet and have been converted back to the number. Please verify.' : '') + '</div>';
       rep.projects.forEach(function(g) {
         html += '<div class="rep-group-title">' + escapeHtml(g.project) + '</div><div class="rep-wrap"><table class="rep-table"><thead><tr>' +
           '<th>DATE</th><th>Project</th><th>Point of Usage</th><th>Task Name</th><th>PARTICULARS</th><th>PO No</th><th>QTY</th><th class="num">AMT</th></tr></thead><tbody>';
         g.rows.forEach(function(r) {
-          var amt = r.amount !== null ? repMoney(r.amount) : (r.amountText ? escapeHtml(r.amountText) : '');
+          var amt = r.amount !== null ? repMoney(r.amount) + (r.amountRecovered ? ' *' : '') : (r.amountText ? escapeHtml(r.amountText) : '');
           html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(r.project) + '</td><td>' + escapeHtml(r.pointOfUsage) + '</td><td>' + escapeHtml(r.taskName) +
             '</td><td>' + escapeHtml(r.particulars) + '</td><td>' + escapeHtml(r.poNo) + '</td><td>' + escapeHtml(r.qty) + '</td><td class="num">' + amt + '</td></tr>';
         });
         html += '<tr class="rep-total"><td colspan="7">' + escapeHtml(g.project) + ' - Total</td><td class="num">' + repMoney(g.total) + '</td></tr></tbody></table></div>';
       });
       box.innerHTML = html;
-      document.getElementById('repDownloadBtn').disabled = false;
+      document.getElementById('repPrintBtn').disabled = false;
     }
 
-    function downloadNonPlannedReport() {
+    function repDmy(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : iso; }
+
+    function printNonPlannedReport() {
       var f = reportFilters();
-      window.location.href = '/report/non-planned.xlsx?fromDate=' + encodeURIComponent(f.fromDate) +
-        '&toDate=' + encodeURIComponent(f.toDate) + '&project=' + encodeURIComponent(f.project);
+      document.getElementById('repPrintHeader').innerHTML =
+        '<div class="rep-print-title">Non Planned Report</div><div>' + repDmy(f.fromDate) + ' to ' + repDmy(f.toDate) +
+        ' &middot; ' + escapeHtml(f.project || 'All Projects') + '</div>';
+      document.body.classList.add('printing-report');
+      var done = function() { document.body.classList.remove('printing-report'); window.removeEventListener('afterprint', done); };
+      window.addEventListener('afterprint', done);
+      window.print();
     }
 
     // ---------- CANCEL ENTRY ----------
