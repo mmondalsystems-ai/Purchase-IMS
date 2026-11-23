@@ -1021,9 +1021,18 @@
         <!-- CANCEL ENTRY -->
         <div id="page-cancelEntry" class="page">
           <div class="page-header"><div><h1 class="page-title">Cancel Entry</h1><p class="page-sub">Cancel a request to automatically restore its quantity back to "Material Quantity Master"</p></div></div>
+          <div class="filter-bar">
+            <div class="field" style="width:320px; max-width:100%;">
+              <label>Filter by Project</label>
+              <select id="cancelProjectFilter" onchange="renderCancelList()"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
+            </div>
+            <div class="field filter-search">
+              <label>Search</label>
+              <input type="text" id="cancelSearchInput" placeholder="Search by material name, PO No or Sr No..." oninput="renderCancelList()">
+            </div>
+          </div>
           <div class="bulk-toolbar">
             <div class="bulk-left">
-              <input type="text" id="cancelSearchInput" placeholder="Filter by Sr No (e.g. 85 or 84,85,86)" oninput="renderCancelList()" style="width:280px; padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;">
               <label><input type="checkbox" id="cancelSelectAll" onchange="selectAllCancel(this.checked)"> Select all</label>
               <span class="bulk-count" id="cancelSelectedCount">0 selected</span>
             </div>
@@ -2408,22 +2417,25 @@
 
     var cancelSelected = {};
 
-    /** Requests shown on the Cancel Entry page after the Sr No filter (comma-separated list allowed). */
+    /** Requests shown on the Cancel Entry page after the Project filter and the Search box (material name, PO No or Sr No). */
     function cancelFilteredRequests() {
-      var q = (document.getElementById('cancelSearchInput').value || '').replace(/#/g, '').trim();
-      if (!q) return allRequests;
-      var terms = q.split(/[\s,]+/).filter(function(t) { return t; });
-      return allRequests.filter(function(r) {
-        var sr = String(r.srNo);
-        return terms.some(function(t) { return sr === t || (terms.length === 1 && sr.indexOf(t) !== -1); });
+      var reqs = allRequests || [];
+      var pf = (document.getElementById('cancelProjectFilter') || {}).value;
+      if (pf) reqs = reqs.filter(function(r) { return (r.project || '').toLowerCase() === pf.toLowerCase(); });
+      var q = ((document.getElementById('cancelSearchInput') || {}).value || '').replace(/#/g, '').trim().toLowerCase();
+      if (q) reqs = reqs.filter(function(r) {
+        var po = (r.stages && r.stages.poEntry && r.stages.poEntry.poNo) || '';
+        return (r.materialName || '').toLowerCase().indexOf(q) !== -1 || String(po).toLowerCase().indexOf(q) !== -1 ||
+               String(r.srNo) === q;
       });
+      return reqs;
     }
 
     function renderCancelList() {
       var list = document.getElementById('cancelList');
       var shown = cancelFilteredRequests();
       if (!allRequests.length) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; updateCancelToolbar(); return; }
-      list.innerHTML = shown.length ? shown.map(renderCancelCard).join('') : '<div class="empty-state">No request matches this Sr No.</div>';
+      list.innerHTML = shown.length ? shown.map(renderCancelCard).join('') : '<div class="empty-state">No request matches this filter.</div>';
       updateCancelToolbar();
     }
 
