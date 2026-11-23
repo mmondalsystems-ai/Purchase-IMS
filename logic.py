@@ -1238,6 +1238,158 @@ def imsApprovalCancelRequest(user, payload):
 
 
 # ---------------------------------------------------------------------------
+# Non Planned report (only for the users listed in config.REPORT_EMAILS)
+# ---------------------------------------------------------------------------
+
+def _report_user(user, as_email=None):
+    """Returns the effective user email if this user may use the report, otherwise raises UserError."""
+    _, _, current, _ = _identity(user, as_email)
+    if current not in cfg.REPORT_EMAILS:
+        raise UserError("You do not have access to this report.")
+    return current
+
+
+def imsReportAccess(user, asEmail=None):
+    _, _, current, _ = _identity(user, asEmail)
+    return current in cfg.REPORT_EMAILS
+
+
+def _parse_amount(text):
+    """'50,000', 'Rs 50000/-', '\u20b950000' -> Decimal. Anything else (letters, two dots) -> None."""
+    s = str(text or "").strip()
+    if not s:
+        return None
+    s = re.sub(r"(?i)\brs\.?|\binr\b|\u20b9|/-", "", s).replace(",", "").strip()
+    if not re.fullmatch(r"-?\d+(\.\d+)?", s):
+        return None
+    try:
+        return Decimal(s)
+    except InvalidOperation:
+        return None
+
+
+def _non_planned_report(user, payload, as_email=None):
+    _report_user(user, as_email)
+    payload = payload or {}
+    d_from, d_to = _parse_iso_date(payload.get("fromDate")), _parse_iso_date(payload.get("toDate"))
+    if not d_from or not d_to:
+        raise UserError("Please choose both From Date and To Date.")
+    if d_to < d_from:
+        raise UserError("To Date cannot be before From Date.")
+    project = str(payload.get("project") or "").strip()
+
+    sql = (
+        "select r.sr_no, r.project, r.entry_timestamp, r.point_of_uses, r.task_name, r.material_name, "
+        "       r.quantity, r.uom, s.extras "
+        "from ims_requests r "
+        "left join ims_request_stages s on s.sr_no = r.sr_no and s.stage_key = 'poEntry' "
+        "where r.planned = 'Non Planned' and r.cancelled = false "
+        "  and (r.entry_timestamp at time zone %s)::date between %s and %s "
+    )
+    params = [str(cfg.APP_TZ), d_from, d_to]
+    if project:
+        sql += "and r.project = %s "
+        params.append(project)
+    sql += "order by r.project, r.entry_timestamp, r.sr_no"
+
+    with db.connection() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    projects, by_project, seen_po, unparsed = [], {}, set(), 0
+    grand = Decimal(0)
+    for r in rows:
+        extras = r["extras"] or {}
+        po_no = str(extras.get("poNo") or "").strip()
+        amount_text = str(extras.get("poAmount") or "").strip()
+        amount, shown_text = None, ""
+        key = (r["project"], po_no.upper())
+        # A PO's value is shown once (first row of that PO); the other rows of the same PO show the PO No only.
+        if po_no and key not in seen_po:
+            seen_po.add(key)
+            amount = _parse_amount(amount_text)
+            if amount is None and amount_text:
+                shown_text = amount_text
+                unparsed += 1
+        elif not po_no:
+            pass
+
+        group = by_project.get(r["project"])
+        if group is None:
+            group = {"project": r["project"], "rows": [], "total": Decimal(0)}
+            by_project[r["project"]] = group
+            projects.append(group)
+        if amount is not None:
+            group["total"] += amount
+            grand += amount
+        qty = _num(r["quantity"])
+        group["rows"].append({
+            "srNo": r["sr_no"],
+            "date": fmt_date(r["entry_timestamp"]),
+            "project": r["project"],
+            "pointOfUsage": r["point_of_uses"] or "",
+            "taskName": r["task_name"] or "",
+            "particulars": r["material_name"] or "",
+            "poNo": po_no,
+            "qty": (str(qty) + (" " + r["uom"] if r["uom"] else "")).strip() if qty != "" else (r["uom"] or ""),
+            "amount": float(amount) if amount is not None else None,
+            "amountText": shown_text,
+        })
+    for g in projects:
+        g["total"] = float(g["total"])
+    return {"fromDate": d_from.isoformat(), "toDate": d_to.isoformat(), "projects": projects,
+            "grandTotal": float(grand), "rowCount": len(rows), "unparsedCount": unparsed}
+
+
+def imsReportNonPlanned(user, payload, asEmail=None):
+    try:
+        return {"success": True, "report": _non_planned_report(user, payload, asEmail)}
+    except UserError as err:
+        return {"success": False, "error": str(err)}
+
+
+def non_planned_report_xlsx(user, payload):
+    """Same data as the on-screen report, as an Excel file (bytes)."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    report = _non_planned_report(user, payload)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Non Planned Report"
+    headers = ["DATE", "Project", "Point of Usage", "Task Name", "PARTICULARS", "PO No", "QTY", "AMT"]
+    ws.append(headers)
+    head_fill = PatternFill("solid", fgColor="1F3A5F")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = head_fill
+        c.alignment = Alignment(vertical="center")
+    money = '#,##0.00'
+    for g in report["projects"]:
+        for row in g["rows"]:
+            amt = row["amount"] if row["amount"] is not None else (row["amountText"] or None)
+            ws.append([row["date"], row["project"], row["pointOfUsage"], row["taskName"],
+                       row["particulars"], row["poNo"], row["qty"], amt])
+            if isinstance(amt, float):
+                ws.cell(row=ws.max_row, column=8).number_format = money
+        ws.append(["", g["project"] + " - Total", "", "", "", "", "", g["total"]])
+        for c in ws[ws.max_row]:
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="E8EEF7")
+        ws.cell(row=ws.max_row, column=8).number_format = money
+    ws.append(["", "GRAND TOTAL", "", "", "", "", "", report["grandTotal"]])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+    ws.cell(row=ws.max_row, column=8).number_format = money
+    for col, width in zip("ABCDEFGH", [14, 20, 28, 34, 40, 18, 14, 16]):
+        ws.column_dimensions[col].width = width
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
 # Registry used by app.py:  name -> (function, needs_user)
 # ---------------------------------------------------------------------------
 
@@ -1263,4 +1415,6 @@ API = {
     "imsApprovalActOnStagesWithSharedFields": (imsApprovalActOnStagesWithSharedFields, True),
     "imsApprovalCancelRequest": (imsApprovalCancelRequest, True),
     "imsApprovalCancelMany": (imsApprovalCancelMany, True),
+    "imsReportAccess": (imsReportAccess, True),
+    "imsReportNonPlanned": (imsReportNonPlanned, True),
 }

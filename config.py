@@ -84,3 +84,6 @@ def _csv_env(name: str, default: str = "") -> list:
 
 # Admins see every stage and can act on any stage (same as IMSAPPROVAL_ADMIN_EMAILS).
 ADMIN_EMAILS = _csv_env("ADMIN_EMAILS", "bnaskar.systems@oswalgroup.net")
+
+# Users who get the extra "Generate Report" page (Non Planned report). Nobody else sees it.
+REPORT_EMAILS = _csv_env("REPORT_EMAILS", "tsaha.purchase@oswalgroup.net")

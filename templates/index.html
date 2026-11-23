@@ -517,6 +517,13 @@
     }
     .req-card:hover { border-color:#d2deed; box-shadow:0 10px 28px rgba(23,32,51,.07); }
     .req-card.is-cancelled { opacity: .72; }
+    .rep-group-title { margin:22px 0 8px; font-size:15px; font-weight:700; color:var(--primary-dark, #1e3a5f); }
+    .rep-wrap { overflow-x:auto; background:#fff; border:1px solid var(--border); border-radius:10px; }
+    .rep-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .rep-table th { background:#1f3a5f; color:#fff; text-align:left; padding:9px 10px; white-space:nowrap; }
+    .rep-table td { padding:8px 10px; border-top:1px solid var(--border); vertical-align:top; }
+    .rep-table td.num, .rep-table th.num { text-align:right; white-space:nowrap; }
+    .rep-table tr.rep-total td { background:#e8eef7; font-weight:700; }
     .cancel-details { margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; color:#7f1d1d; display:flex; flex-wrap:wrap; gap:6px 24px; }
     .cancel-details .cancel-label { font-weight:700; color:#b91c1c; margin-right:6px; }
     .req-header, .stage-section-header {
@@ -826,6 +833,7 @@
         <div class="nav-item" data-page="purchaseRequest" onclick="purchaseRequestFocusSrNos=null; navigate('purchaseRequest', this)">📋 Purchase Request</div>
         <div class="nav-item" data-page="approvalFlow" onclick="navigate('approvalFlow', this)">✅ Approval Flow</div>
         <div class="nav-item" data-page="cancelEntry" onclick="navigate('cancelEntry', this)">🚫 Cancel Entry</div>
+        <div class="nav-item" id="navReport" data-page="nonPlannedReport" style="display:none;" onclick="navigate('nonPlannedReport', this)">📊 Generate Report</div>
         <div class="nav-item" data-page="vendorMaster" onclick="navigate('vendorMaster', this)">👥 Vendor Master</div>
         <div class="nav-item" data-page="materialMaster" onclick="navigate('materialMaster', this)">📦 Material Master</div>
         <div class="nav-item" data-page="purchaseOrder" onclick="navigate('purchaseOrder', this)">🛒 Purchase Order</div>
@@ -1023,6 +1031,23 @@
           <div id="stageDetailList"></div>
         </div>
 
+        <!-- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) -->
+        <div id="page-nonPlannedReport" class="page">
+          <div class="page-header"><div><h1 class="page-title">Generate Report</h1><p class="page-sub">Non Planned requests, project wise. A PO value is counted once even when the PO has many items.</p></div></div>
+          <div class="filter-bar">
+            <div class="field"><label>From Date</label><input type="date" id="repFrom"></div>
+            <div class="field"><label>To Date</label><input type="date" id="repTo"></div>
+            <div class="field" style="width:260px; max-width:100%;">
+              <label>Project</label>
+              <select id="repProject"><option value="">All Projects</option><option>Orchard Amritaya</option><option>Orchard Anantaa</option><option>Newtown Rajarhat</option><option>Orchard Avaasa</option><option>Titagarh</option><option>HO</option></select>
+            </div>
+            <div class="field"><button class="btn" id="repGenerateBtn" onclick="generateNonPlannedReport()">Generate</button></div>
+            <div class="field"><button class="btn outline" id="repDownloadBtn" onclick="downloadNonPlannedReport()" disabled>Download Excel</button></div>
+          </div>
+          <div class="msg" id="repMsg"></div>
+          <div id="repResult"></div>
+        </div>
+
         <!-- CANCEL ENTRY -->
         <div id="page-cancelEntry" class="page">
           <div class="page-header"><div><h1 class="page-title">Cancel Entry</h1><p class="page-sub">Cancel a request to automatically restore its quantity back to "Material Quantity Master"</p></div></div>
@@ -1181,7 +1206,7 @@
           document.getElementById('testAsBanner').style.display = 'flex';
           currentUserEmail = info.email.toLowerCase();
           isAdminUser = !!info.isAdmin;
-          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects();
+          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
         })
         .withFailureHandler(function(err) { alert(err.message || 'Failed to start Test As.'); })
         .imsApprovalGetCurrentUserInfo(val);
@@ -1197,7 +1222,7 @@
         document.getElementById('userAvatar').textContent = (email || '??').substring(0,2).toUpperCase();
         currentUserEmail = email.toLowerCase();
         isAdminUser = !!(info && info.isAdmin);
-        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects();
+        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
       }).imsApprovalGetCurrentUserInfo();
     }
 
@@ -1263,6 +1288,7 @@
       }).imsApprovalGetCurrentUserInfo();
 
 
+      loadReportAccess();
       loadDashboard();
     }
 
@@ -2408,6 +2434,68 @@
           items: selectedItems.map(function(item) { return { srNo: item.srNo, stageKey: item.stageKey }; }),
           asEmail: testAsEmail || ''
         });
+    }
+
+    // ---------- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) ----------
+    function loadReportAccess() {
+      google.script.run.withSuccessHandler(function(ok) {
+        document.getElementById('navReport').style.display = ok ? '' : 'none';
+        if (ok && !document.getElementById('repFrom').value) {
+          var t = new Date(), pad = function(n) { return (n < 10 ? '0' : '') + n; };
+          document.getElementById('repTo').value = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+          document.getElementById('repFrom').value = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-01';
+        }
+      }).withFailureHandler(function() {
+        document.getElementById('navReport').style.display = 'none';
+      }).imsReportAccess(testAsEmail || '');
+    }
+
+    function reportFilters() {
+      return { fromDate: document.getElementById('repFrom').value, toDate: document.getElementById('repTo').value,
+               project: document.getElementById('repProject').value };
+    }
+
+    function repMoney(n) {
+      return Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function generateNonPlannedReport() {
+      var f = reportFilters(), msg = document.getElementById('repMsg'), box = document.getElementById('repResult');
+      msg.className = 'msg'; msg.textContent = '';
+      document.getElementById('repDownloadBtn').disabled = true;
+      box.innerHTML = '<div class="spinner"></div>';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.success) { box.innerHTML = ''; msg.className = 'msg error'; msg.textContent = (res && res.error) || 'Failed.'; return; }
+          renderNonPlannedReport(res.report);
+        })
+        .withFailureHandler(function(err) { box.innerHTML = ''; msg.className = 'msg error'; msg.textContent = err.message; })
+        .imsReportNonPlanned(f, testAsEmail || '');
+    }
+
+    function renderNonPlannedReport(rep) {
+      var box = document.getElementById('repResult');
+      if (!rep.projects.length) { box.innerHTML = '<div class="empty-state">No Non Planned requests in this date range.</div>'; return; }
+      var html = '<div class="req-sub" style="margin-bottom:6px;">' + rep.rowCount + ' item(s) &middot; Grand Total: <b>' + repMoney(rep.grandTotal) + '</b>' +
+        (rep.unparsedCount ? ' &middot; <span style="color:#b91c1c;">' + rep.unparsedCount + ' PO amount(s) are not a plain number and are not in the total</span>' : '') + '</div>';
+      rep.projects.forEach(function(g) {
+        html += '<div class="rep-group-title">' + escapeHtml(g.project) + '</div><div class="rep-wrap"><table class="rep-table"><thead><tr>' +
+          '<th>DATE</th><th>Project</th><th>Point of Usage</th><th>Task Name</th><th>PARTICULARS</th><th>PO No</th><th>QTY</th><th class="num">AMT</th></tr></thead><tbody>';
+        g.rows.forEach(function(r) {
+          var amt = r.amount !== null ? repMoney(r.amount) : (r.amountText ? escapeHtml(r.amountText) : '');
+          html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(r.project) + '</td><td>' + escapeHtml(r.pointOfUsage) + '</td><td>' + escapeHtml(r.taskName) +
+            '</td><td>' + escapeHtml(r.particulars) + '</td><td>' + escapeHtml(r.poNo) + '</td><td>' + escapeHtml(r.qty) + '</td><td class="num">' + amt + '</td></tr>';
+        });
+        html += '<tr class="rep-total"><td colspan="7">' + escapeHtml(g.project) + ' - Total</td><td class="num">' + repMoney(g.total) + '</td></tr></tbody></table></div>';
+      });
+      box.innerHTML = html;
+      document.getElementById('repDownloadBtn').disabled = false;
+    }
+
+    function downloadNonPlannedReport() {
+      var f = reportFilters();
+      window.location.href = '/report/non-planned.xlsx?fromDate=' + encodeURIComponent(f.fromDate) +
+        '&toDate=' + encodeURIComponent(f.toDate) + '&project=' + encodeURIComponent(f.project);
     }
 
     // ---------- CANCEL ENTRY ----------

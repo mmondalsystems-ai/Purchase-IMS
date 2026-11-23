@@ -15,7 +15,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -139,6 +139,23 @@ def api(fn: str, request: Request, body: dict = None):
     except Exception:
         log.exception("API call failed: %s", fn)
         return JSONResponse({"ok": False, "error": "Server error. Please try again."}, status_code=500)
+
+
+@app.get("/report/non-planned.xlsx")
+def report_non_planned_xlsx(request: Request, fromDate: str = "", toDate: str = "", project: str = ""):
+    email = _current_email(request)
+    if not email:
+        return RedirectResponse("/login")
+    try:
+        data = logic.non_planned_report_xlsx(email, {"fromDate": fromDate, "toDate": toDate, "project": project})
+    except logic.UserError as err:
+        return JSONResponse({"ok": False, "error": str(err)}, status_code=403)
+    except Exception:
+        log.exception("Report download failed")
+        return JSONResponse({"ok": False, "error": "Server error. Please try again."}, status_code=500)
+    name = "Non_Planned_Report_%s_to_%s.xlsx" % (fromDate, toDate)
+    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="%s"' % name})
 
 
 @app.on_event("shutdown")
