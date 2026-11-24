@@ -19,6 +19,60 @@ function ImsPoTracker_headers_() {
   return h;
 }
 
+// Header colour and light body colour per stage group (the PO columns use grey-blue).
+var IMS_PO_TRACKER_COLORS = {
+  po:             ['#cfd8e3', '#f4f6f9'],
+  rateApproval:   ['#bfdbfe', '#eff6ff'],
+  advancePayment: ['#fde68a', '#fffbeb'],
+  delivery:       ['#bbf7d0', '#f0fdf4'],
+  grn:            ['#e9d5ff', '#faf5ff'],
+  truckEntry:     ['#fed7aa', '#fff7ed']
+};
+
+/** Colours each stage block (header + body) and marks Approved / Not Approved / Cancelled / delays. */
+function ImsPoTracker_format_(sheet, rowCount) {
+  var baseCols = 12;
+  var lastRow = Math.max(rowCount + 1, 2);
+  var groups = [{ key: 'po', start: 1, width: baseCols }];
+  IMS_PO_TRACKER_STAGES.forEach(function (s, i) {
+    groups.push({ key: s[0], start: baseCols + 1 + i * 4, width: 4 });
+  });
+  groups.forEach(function (g) {
+    var c = IMS_PO_TRACKER_COLORS[g.key];
+    sheet.getRange(1, g.start, 1, g.width).setBackground(c[0]).setFontWeight('bold');
+    sheet.getRange(2, g.start, Math.max(sheet.getMaxRows() - 1, 1), g.width).setBackground(c[1]);
+    // A thick left border separates each stage block.
+    sheet.getRange(1, g.start, Math.max(sheet.getMaxRows(), 1), 1)
+      .setBorder(null, true, null, null, null, null, '#6b7280', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  });
+  var rules = [];
+  function addRule(range, text, bg, fg) {
+    rules.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(text).setBackground(bg).setFontColor(fg)
+      .setRanges([range]).build());
+  }
+  var all = IMS_PO_TRACKER_STAGES.map(function (s, i) { return baseCols + 1 + i * 4 + 2; });
+  all.forEach(function (col) {
+    var r = sheet.getRange(2, col, Math.max(sheet.getMaxRows() - 1, 1), 1);
+    addRule(r, 'Approved', '#86efac', '#14532d');
+    addRule(r, 'Not Approved', '#fecaca', '#7f1d1d');
+  });
+  var statusCol = sheet.getRange(2, 9, Math.max(sheet.getMaxRows() - 1, 1), 1);
+  addRule(statusCol, 'Done', '#86efac', '#14532d');
+  addRule(statusCol, 'Not Done', '#fef3c7', '#78350f');
+  addRule(statusCol, 'Cancelled', '#fca5a5', '#7f1d1d');
+  // Delay columns: any value above 0 turns red.
+  IMS_PO_TRACKER_STAGES.forEach(function (s, i) {
+    var col = baseCols + 1 + i * 4 + 3;
+    var r = sheet.getRange(2, col, Math.max(sheet.getMaxRows() - 1, 1), 1);
+    rules.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=IFERROR(VALUE(' + r.getA1Notation().split(':')[0] + ')>0,FALSE)')
+      .setBackground('#fca5a5').setFontColor('#7f1d1d').setRanges([r]).build());
+  });
+  sheet.setConditionalFormatRules(rules);
+  sheet.autoResizeColumns(1, baseCols + IMS_PO_TRACKER_STAGES.length * 4);
+  sheet.setColumnWidth(6, 360);
+}
+
 function ImsPoTracker_refresh() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(IMS_PO_TRACKER_TAB) || ss.insertSheet(IMS_PO_TRACKER_TAB);
@@ -44,6 +98,7 @@ function ImsPoTracker_refresh() {
     range.setNumberFormat('@');
     range.setValues(rows.map(function (r) { return r.map(function (v) { return v === null || v === undefined ? '' : String(v); }); }));
   }
+  ImsPoTracker_format_(sheet, rows.length);
   return rows.length;
 }
 
