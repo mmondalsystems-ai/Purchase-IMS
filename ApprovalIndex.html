@@ -849,6 +849,7 @@
         <div class="nav-item" data-page="purchaseRequest" onclick="purchaseRequestFocusSrNos=null; navigate('purchaseRequest', this)">📋 Purchase Request</div>
         <div class="nav-item" data-page="approvalFlow" onclick="navigate('approvalFlow', this)">✅ Approval Flow</div>
         <div class="nav-item" data-page="cancelEntry" onclick="navigate('cancelEntry', this)">🚫 Cancel Entry</div>
+        <div class="nav-item" id="navPoFlow" data-page="poFlow" style="display:none;" onclick="navigate('poFlow', this)">📦 PO Flow</div>
         <div class="nav-item" id="navReport" data-page="nonPlannedReport" style="display:none;" onclick="navigate('nonPlannedReport', this)">📊 Generate Report</div>
         <div class="nav-item" data-page="vendorMaster" onclick="navigate('vendorMaster', this)">👥 Vendor Master</div>
         <div class="nav-item" data-page="materialMaster" onclick="navigate('materialMaster', this)">📦 Material Master</div>
@@ -1047,6 +1048,23 @@
           <div id="stageDetailList"></div>
         </div>
 
+        <!-- PO FLOW (visible only while the PO flow switch is ON) -->
+        <div id="page-poFlow" class="page">
+          <div class="page-header"><div><h1 class="page-title">PO Flow</h1><p class="page-sub">After PO Preparation every PO runs as one line: Rate Approval, Advance Payment, Delivery, GRN and Truck Entry.</p></div></div>
+          <div class="filter-bar">
+            <div class="field filter-search">
+              <label>Search</label>
+              <input type="text" id="poSearch" placeholder="Search by PO No, supplier, material or indent no..." oninput="renderPoFlow()">
+            </div>
+            <div class="field" style="width:200px; max-width:100%;">
+              <label>Show</label>
+              <select id="poShow" onchange="renderPoFlow()"><option value="open">Open POs</option><option value="done">Completed</option><option value="cancelled">Cancelled</option><option value="all">All</option></select>
+            </div>
+          </div>
+          <div class="msg" id="poMsg"></div>
+          <div id="poList"><div class="spinner"></div></div>
+        </div>
+
         <!-- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) -->
         <div id="page-nonPlannedReport" class="page">
           <div class="page-header"><div><h1 class="page-title">Generate Report</h1><p class="page-sub">Non Planned requests, project wise. A PO value is counted once even when the PO has many items.</p></div></div>
@@ -1223,7 +1241,7 @@
           document.getElementById('testAsBanner').style.display = 'flex';
           currentUserEmail = info.email.toLowerCase();
           isAdminUser = !!info.isAdmin;
-          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
+          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess(); loadPoFlowStatus();
         })
         .withFailureHandler(function(err) { alert(err.message || 'Failed to start Test As.'); })
         .imsApprovalGetCurrentUserInfo(val);
@@ -1239,7 +1257,7 @@
         document.getElementById('userAvatar').textContent = (email || '??').substring(0,2).toUpperCase();
         currentUserEmail = email.toLowerCase();
         isAdminUser = !!(info && info.isAdmin);
-        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
+        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess(); loadPoFlowStatus();
       }).imsApprovalGetCurrentUserInfo();
     }
 
@@ -1264,6 +1282,7 @@
       if (pageId === 'purchaseRequest') loadRequests();
       if (pageId === 'approvalFlow') loadQueue();
       if (pageId === 'cancelEntry') loadCancelList();
+      if (pageId === 'poFlow') loadPoFlow();
       if (pageId === 'vendorMaster') loadVendors();
       if (pageId === 'materialMaster') loadMaterials();
     }
@@ -1305,7 +1324,7 @@
       }).imsApprovalGetCurrentUserInfo();
 
 
-      loadReportAccess();
+      loadReportAccess(); loadPoFlowStatus();
       loadDashboard();
     }
 
@@ -2454,6 +2473,94 @@
     }
 
     // ---------- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) ----------
+    // ---------- PO FLOW ----------
+    var poFlowData = [];
+
+    function loadPoFlowStatus() {
+      google.script.run.withSuccessHandler(function(st) {
+        document.getElementById('navPoFlow').style.display = (st && st.enabled) ? '' : 'none';
+      }).withFailureHandler(function() {
+        document.getElementById('navPoFlow').style.display = 'none';
+      }).imsPoFlowStatus();
+    }
+
+    function loadPoFlow() {
+      document.getElementById('poList').innerHTML = '<div class="spinner"></div>';
+      google.script.run.withSuccessHandler(function(res) {
+        poFlowData = (res && res.pos) || [];
+        renderPoFlow();
+      }).withFailureHandler(function(err) {
+        document.getElementById('poList').innerHTML = '<div class="empty-state">Could not load POs.</div>';
+      }).imsPoFlowList(testAsEmail || '');
+    }
+
+    function renderPoFlow() {
+      var q = (document.getElementById('poSearch').value || '').toLowerCase().trim();
+      var show = document.getElementById('poShow').value;
+      var list = poFlowData.filter(function(p) {
+        if (show === 'open' && (p.cancelled || p.status === 'Done')) return false;
+        if (show === 'done' && (p.cancelled || p.status !== 'Done')) return false;
+        if (show === 'cancelled' && !p.cancelled) return false;
+        if (!q) return true;
+        var hay = [p.poNo, p.vendorName, p.project, p.indentNos.join(' '), p.items.map(function(i){ return i.materialName; }).join(' ')].join(' ').toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+      if (!list.length) { document.getElementById('poList').innerHTML = '<div class="empty-state">No POs to show.</div>'; return; }
+      document.getElementById('poList').innerHTML = list.map(function(p) {
+        var items = p.items.map(function(i) {
+          return '<li>' + escapeHtml(i.materialName) + ' &mdash; ' + escapeHtml(String(i.quantity)) + ' ' + escapeHtml(i.uom) +
+                 (i.indentNo ? ' <span style="color:var(--text-muted)">(Indent ' + escapeHtml(i.indentNo) + ')</span>' : '') + '</li>';
+        }).join('');
+        var stages = p.stages.map(function(s) {
+          var color = s.done ? '#1a7f4b' : (s.canAct ? '#b45309' : '#6b7280');
+          var btn = s.canAct ? ' <button class="btn" style="padding:4px 10px;font-size:12px;" onclick="poAct(' + p.poId + ',\'' + s.key + '\')">Approve</button>' : '';
+          var extra = s.extra.filter(function(e){ return e.value; }).map(function(e){ return escapeHtml(e.label) + ': ' + escapeHtml(String(e.value)); }).join(', ');
+          return '<tr><td>' + escapeHtml(s.name) + '</td><td>' + escapeHtml(s.approver || '-') + '</td><td>' + escapeHtml(s.planned || '-') +
+                 '</td><td>' + escapeHtml(s.actual || '-') + '</td><td>' + (s.delay === '' ? '-' : escapeHtml(String(s.delay))) +
+                 '</td><td style="color:' + color + ';font-weight:600;">' + escapeHtml(s.status) + btn + (extra ? '<div style="font-size:11px;color:var(--text-muted);">' + extra + '</div>' : '') + '</td></tr>';
+        }).join('');
+        var head = '<b>PO ' + escapeHtml(p.poNo) + '</b> &middot; ' + escapeHtml(p.project) + ' &middot; ' + escapeHtml(p.vendorName) +
+                   ' &middot; Amount: ' + escapeHtml(String(p.poAmount)) + (p.cancelled ? ' &middot; <span style="color:#b91c1c;font-weight:700;">CANCELLED</span>' : (p.status === 'Done' ? ' &middot; <span style="color:#1a7f4b;font-weight:700;">COMPLETED</span>' : ''));
+        var cancel = p.canCancel ? '<button class="btn outline" style="color:#b91c1c;border-color:#b91c1c;" onclick="poCancel(' + p.poId + ',\'' + escapeHtml(p.poNo).replace(/'/g, '') + '\')">Cancel whole PO</button>' : '';
+        var cinfo = p.cancelled ? '<div style="margin-top:6px;font-size:12.5px;color:#b91c1c;">Cancelled ' + escapeHtml(p.cancelledAt) + ' by ' + escapeHtml(p.cancelledBy) + ' &mdash; ' + escapeHtml(p.cancelReason) + '</div>' : '';
+        return '<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;"><div>' + head + '</div>' + cancel + '</div>' +
+               '<div style="margin:6px 0;font-size:12.5px;color:var(--text-muted);">Indent No(s): ' + escapeHtml(p.indentNos.join(', ') || '-') + ' &middot; Payment terms: ' + escapeHtml(p.paymentTerms || '-') + ' &middot; Advance: ' + escapeHtml(p.advanceRequired) + '</div>' +
+               '<ul style="margin:6px 0 10px 18px;padding:0;font-size:13.5px;">' + items + '</ul>' + cinfo +
+               '<div style="overflow-x:auto;"><table class="data-table" style="width:100%;font-size:13px;"><thead><tr><th>Stage</th><th>Approver</th><th>Planned</th><th>Actual</th><th>Delay</th><th>Status</th></tr></thead><tbody>' + stages + '</tbody></table></div></div>';
+      }).join('');
+    }
+
+    function poMsg(text, ok) {
+      var el = document.getElementById('poMsg');
+      el.textContent = text; el.className = 'msg ' + (ok ? 'success' : 'error'); el.style.display = text ? 'block' : 'none';
+    }
+
+    function poAct(poId, stageKey) {
+      var extra = {};
+      if (stageKey === 'delivery') {
+        var v = window.prompt('Challan No./Bill No.');
+        if (v === null) return;
+        if (!String(v).trim()) { poMsg('Challan No./Bill No. is required.', false); return; }
+        extra.challanBillNo = String(v).trim();
+      }
+      google.script.run.withSuccessHandler(function(res) {
+        if (res && res.success) { poMsg('Stage approved.', true); loadPoFlow(); }
+        else poMsg((res && res.error) || 'Failed.', false);
+      }).withFailureHandler(function() { poMsg('Server error. Please try again.', false); })
+        .imsPoFlowActOnStage({ poId: poId, stageKey: stageKey, extraFields: extra, asEmail: testAsEmail || '' });
+    }
+
+    function poCancel(poId, poNo) {
+      var reason = window.prompt('Cancel the WHOLE PO ' + poNo + ' (all its materials). Cancel reason:');
+      if (reason === null) return;
+      if (!String(reason).trim()) { poMsg('Cancel Reason is required.', false); return; }
+      google.script.run.withSuccessHandler(function(res) {
+        if (res && res.success) { poMsg('PO cancelled.', true); loadPoFlow(); loadCancelList(); }
+        else poMsg((res && res.error) || 'Failed.', false);
+      }).withFailureHandler(function() { poMsg('Server error. Please try again.', false); })
+        .imsPoFlowCancel({ poId: poId, reason: String(reason).trim(), asEmail: testAsEmail || '' });
+    }
+
     function loadReportAccess() {
       google.script.run.withSuccessHandler(function(ok) {
         document.getElementById('navReport').style.display = ok ? '' : 'none';
