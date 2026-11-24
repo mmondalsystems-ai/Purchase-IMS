@@ -1266,6 +1266,26 @@
       if (pageId === 'cancelEntry') loadCancelList();
       if (pageId === 'vendorMaster') loadVendors();
       if (pageId === 'materialMaster') loadMaterials();
+
+      // Remember the open section so a browser refresh comes back to it (this tab only).
+      try {
+        sessionStorage.setItem('imsPage', pageId);
+        sessionStorage.setItem('imsStage', currentStageDetailKey || '');
+      } catch (e) {}
+    }
+
+    var pendingStageRestore = '';
+    /** After a refresh: reopen the section that was open (the New Entry form always starts fresh). */
+    function restorePage() {
+      try {
+        var p = sessionStorage.getItem('imsPage');
+        if (!p || p === 'dashboard' || p === 'newEntry' || !document.getElementById('page-' + p)) return;
+        if (p === 'stageDetail') {
+          pendingStageRestore = sessionStorage.getItem('imsStage') || '';
+          p = 'approvalFlow';
+        }
+        navigate(p, document.querySelector('[data-page=' + p + ']'));
+      } catch (e) {}
     }
 
     function init() {
@@ -2289,6 +2309,11 @@
         queueByStage[item.stageKey].push(item);
       });
       renderQueueTiles();
+      if (pendingStageRestore) {  // refresh while a stage list was open: reopen it
+        var restoreKey = pendingStageRestore;
+        pendingStageRestore = '';
+        openStageDetail(restoreKey);
+      }
     }
 
     /** Builds the glass preview panel for one stage tile: the first few materials, then a
@@ -3080,6 +3105,7 @@
     }
 
     init();
+    restorePage();
   </script>
 
 </body>
