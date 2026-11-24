@@ -789,33 +789,11 @@ def _strip_internal(reqs):
     return reqs
 
 
-def _po_item_map():
-    """{sr_no: {poId, poNo}} while the PO flow is ON, otherwise {} (original behavior)."""
-    import po_flow
-    if not po_flow.enabled():
-        return {}
-    with db.connection() as conn:
-        return po_flow.po_of_items(conn)
-
-
 def imsApprovalGetRequests(user, asEmail=None):
     _, _, current, is_admin = _identity(user, asEmail)
     with db.connection() as conn:
         ctx = _load_context(conn)
         reqs = _requests_impl(conn, current, is_admin, ctx)
-    in_po = _po_item_map()
-    if in_po:
-        import po_flow
-        for r in reqs:
-            p = in_po.get(r["srNo"])
-            if not p:
-                continue
-            r["poFlowNo"] = p["poNo"]
-            for key in po_flow.POST_PO_KEYS + ["poEntry"]:
-                sd = r["stages"].get(key)
-                if sd:
-                    sd["canCurrentUserAct"] = False
-                    sd["canEdit"] = False
     return _strip_internal(reqs)
 
 
@@ -845,8 +823,6 @@ def imsApprovalGetMyQueue(user, asEmail=None):
     with db.connection() as conn:
         ctx = _load_context(conn)
         reqs = _requests_impl(conn, current, is_admin, ctx)
-    import po_flow
-    in_po = _po_item_map()
 
     queue = []
     for req in reqs:
@@ -856,8 +832,6 @@ def imsApprovalGetMyQueue(user, asEmail=None):
             sd = req["stages"].get(stage["key"])
             if not sd:
                 continue
-            if req["srNo"] in in_po and stage["key"] in po_flow.POST_PO_KEYS:
-                continue  # these stages now run on the PO (PO Flow page)
             if stage["key"] == "advancePayment":
                 if (req["stages"].get("poEntry") or {}).get("advancePaymentRequired") != "Yes":
                     continue
@@ -891,9 +865,6 @@ def imsApprovalGetMyQueue(user, asEmail=None):
                 "canAct": sd["canCurrentUserAct"],
                 "_plannedDt": sd["_plannedDt"],
             })
-
-    if in_po:
-        queue.extend(po_flow.queue_entries(user, asEmail))  # PO entries replace the item entries of PO'd materials
 
     far = dt.datetime.max.replace(tzinfo=dt.timezone.utc)
     queue.sort(key=lambda q: (q["_plannedDt"] is None, _as_tz(q["_plannedDt"]) if q["_plannedDt"] else far))
@@ -950,20 +921,6 @@ def _clean_extra(key, value):
     return value.strip() if isinstance(value, str) else value
 
 
-PO_FLOW_STAGE_KEYS = ("poEntry", "rateApproval", "advancePayment", "delivery", "grn", "truckEntry")
-
-
-def _guard_po_item(sr_no, stage_key):
-    """PO flow ON and the item already belongs to a live PO: the PO stages are handled on the PO, not per item."""
-    if stage_key not in PO_FLOW_STAGE_KEYS:
-        return
-    import po_flow
-    p = po_flow.item_po(sr_no)
-    if p:
-        raise UserError("This material is part of PO %s. Rate Approval to Truck Entry now run on the PO - "
-                        "use the PO Flow page." % p["poNo"])
-
-
 def _act_on_stage(user, payload):
     if not payload or not payload.get("srNo") or not payload.get("stageKey"):
         raise UserError("Missing srNo or stageKey.")
@@ -972,7 +929,6 @@ def _act_on_stage(user, payload):
     if not stage_def:
         raise UserError("Unknown stage: " + str(stage_key))
     extra_fields = payload.get("extraFields") or {}
-    _guard_po_item(payload["srNo"], stage_key)
 
     with db.connection() as conn:
         req = conn.execute("select * from ims_requests where sr_no = %s for update", (payload["srNo"],)).fetchone()
@@ -1089,7 +1045,6 @@ def _edit_po_entry(user, payload):
         raise UserError("Missing srNo.")
     stage_def = STAGE_BY_KEY["poEntry"]
     extra_fields = payload.get("extraFields") or {}
-    _guard_po_item(payload["srNo"], "poEntry")
     with db.connection() as conn:
         req = conn.execute("select * from ims_requests where sr_no = %s for update", (payload["srNo"],)).fetchone()
         if not req:
@@ -1157,25 +1112,6 @@ def imsApprovalEditPoEntry(user, payload):
 def imsApprovalActOnStage(user, payload):
     try:
         _act_on_stage(user, payload)
-        if payload.get("stageKey") == "poEntry":
-            import po_flow
-            if po_flow.enabled():  # PO flow ON: this single item becomes a one-item PO
-                try:
-                    po_flow.create_po_for_items(user, [payload["srNo"]], payload.get("extraFields") or {})
-                except Exception:
-                    log.exception("PO creation failed after PO Preparation of request %s", payload["srNo"])
-        return {"success": True}
-    except UserError as err:
-        return {"success": False, "error": str(err)}
-    except Exception:
-        log.exception("imsApprovalActOnStage failed")
-        return {"success": False, "error": "Server error while saving. Please try again."}
-
-
-def _act_one(user, payload):
-    """Original single-item action without any PO creation (used by the bulk path)."""
-    try:
-        _act_on_stage(user, payload)
         return {"success": True}
     except UserError as err:
         return {"success": False, "error": str(err)}
@@ -1185,35 +1121,12 @@ def _act_one(user, payload):
 
 
 def _act_on_many(user, payload, shared_fields):
-    res = _act_on_many_items(user, payload, shared_fields)
-    # PO flow ON: the PO Preparation items approved together become ONE PO.
-    po_srs = [r["srNo"] for r in res.get("results", []) if r.get("success") and r.get("stageKey") == "poEntry"]
-    if po_srs and shared_fields:
-        import po_flow
-        if po_flow.enabled():
-            try:
-                po_flow.create_po_for_items(user, po_srs, shared_fields)
-            except Exception as err:
-                log.exception("PO creation failed after bulk PO Preparation")
-                res["poError"] = str(err) if isinstance(err, UserError) else "PO could not be created."
-    return res
-
-
-def _act_on_many_items(user, payload, shared_fields):
     items = (payload or {}).get("items") or []
     if not items:
         return {"success": False, "successCount": 0, "failureCount": 0, "results": [], "error": "No requests selected."}
     if len(items) > 50:
         return {"success": False, "successCount": 0, "failureCount": len(items), "results": [],
                 "error": "Select 50 or fewer requests at a time."}
-    po_batch = [(i or {}).get("srNo") for i in items if (i or {}).get("stageKey") == "poEntry" and (i or {}).get("srNo")]
-    if po_batch and shared_fields:
-        import po_flow
-        if po_flow.enabled():
-            try:
-                po_flow.validate_po_batch(po_batch, shared_fields)
-            except UserError as err:
-                return {"success": False, "successCount": 0, "failureCount": len(items), "results": [], "error": str(err)}
     seen, results = set(), []
     for item in items:
         sr_no = (item or {}).get("srNo")
@@ -1227,8 +1140,8 @@ def _act_on_many_items(user, payload, shared_fields):
         if key in seen:
             continue
         seen.add(key)
-        res = _act_one(user, {"srNo": sr_no, "stageKey": stage_key, "extraFields": dict(shared_fields),
-                              "asEmail": payload.get("asEmail") or ""})
+        res = imsApprovalActOnStage(user, {"srNo": sr_no, "stageKey": stage_key, "extraFields": dict(shared_fields),
+                                           "asEmail": payload.get("asEmail") or ""})
         result["success"] = bool(res and res.get("success"))
         if not result["success"]:
             result["error"] = (res or {}).get("error") or "Failed."
@@ -1270,21 +1183,12 @@ def imsApprovalCancelMany(user, payload):
 
 
 def imsApprovalCancelRequest(user, payload):
-    return cancel_request_impl(user, payload)
-
-
-def cancel_request_impl(user, payload, skip_item_guard=False):
     try:
         if not payload or not payload.get("srNo"):
             raise UserError("Missing srNo.")
         reason = str(payload.get("reason") or "").strip()
         if not reason:
             raise UserError("Cancel Reason is required.")
-        if not skip_item_guard:
-            import po_flow
-            p = po_flow.item_po(payload["srNo"])
-            if p:
-                raise UserError("This material is part of PO %s. A PO is cancelled as a whole - cancel it from the PO Flow page." % p["poNo"])
 
         with db.connection() as conn:
             req = conn.execute("select * from ims_requests where sr_no = %s for update", (payload["srNo"],)).fetchone()
@@ -1503,49 +1407,7 @@ def imsReportNonPlanned(user, payload, asEmail=None):
 # Registry used by app.py:  name -> (function, needs_user)
 # ---------------------------------------------------------------------------
 
-def imsPoFlowStatus(user):
-    import po_flow
-    return po_flow.status(user)
-
-
-def imsPoFlowSetEnabled(user, on):
-    import po_flow
-    return po_flow.set_enabled(user, bool(on))
-
-
-def imsPoFlowList(user, asEmail=None):
-    import po_flow
-    return po_flow.list_pos(user, asEmail)
-
-
-def imsPoFlowActOnStage(user, payload):
-    import po_flow
-    return po_flow.act_on_po_stage(user, payload)
-
-
-def imsPoFlowCancel(user, payload):
-    import po_flow
-    return po_flow.cancel_po(user, payload)
-
-
-def imsPoFlowConvertInFlight(user):
-    import po_flow
-    return po_flow.convert_in_flight(user)
-
-
-def imsPoTrackerRows(user):
-    import po_flow
-    return po_flow.tracker_rows(user)
-
-
 API = {
-    "imsPoFlowStatus": (imsPoFlowStatus, True),
-    "imsPoFlowSetEnabled": (imsPoFlowSetEnabled, True),
-    "imsPoFlowList": (imsPoFlowList, True),
-    "imsPoFlowActOnStage": (imsPoFlowActOnStage, True),
-    "imsPoFlowCancel": (imsPoFlowCancel, True),
-    "imsPoFlowConvertInFlight": (imsPoFlowConvertInFlight, True),
-    "imsPoTrackerRows": (imsPoTrackerRows, True),
     "imsApprovalGetStageConfigForClient": (imsApprovalGetStageConfigForClient, False),
     "imsApprovalGetProjectsForClient": (imsApprovalGetProjectsForClient, False),
     "imsApprovalGetMaterialTypesForClient": (imsApprovalGetMaterialTypesForClient, False),

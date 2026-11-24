@@ -1047,23 +1047,6 @@
           <div id="stageDetailList"></div>
         </div>
 
-        <!-- PO FLOW (visible only while the PO flow switch is ON) -->
-        <div id="page-poFlow" class="page">
-          <div class="page-header"><div><h1 class="page-title">PO Flow</h1><p class="page-sub">After PO Preparation every PO runs as one line: Rate Approval, Advance Payment, Delivery, GRN and Truck Entry.</p></div></div>
-          <div class="filter-bar">
-            <div class="field filter-search">
-              <label>Search</label>
-              <input type="text" id="poSearch" placeholder="Search by PO No, supplier, material or indent no..." oninput="renderPoFlow()">
-            </div>
-            <div class="field" style="width:200px; max-width:100%;">
-              <label>Show</label>
-              <select id="poShow" onchange="renderPoFlow()"><option value="open">Open POs</option><option value="done">Completed</option><option value="cancelled">Cancelled</option><option value="all">All</option></select>
-            </div>
-          </div>
-          <div class="msg" id="poMsg"></div>
-          <div id="poList"><div class="spinner"></div></div>
-        </div>
-
         <!-- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) -->
         <div id="page-nonPlannedReport" class="page">
           <div class="page-header"><div><h1 class="page-title">Generate Report</h1><p class="page-sub">Non Planned requests, project wise. A PO value is counted once even when the PO has many items.</p></div></div>
@@ -1240,7 +1223,7 @@
           document.getElementById('testAsBanner').style.display = 'flex';
           currentUserEmail = info.email.toLowerCase();
           isAdminUser = !!info.isAdmin;
-          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess(); loadPoFlowStatus();
+          loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
         })
         .withFailureHandler(function(err) { alert(err.message || 'Failed to start Test As.'); })
         .imsApprovalGetCurrentUserInfo(val);
@@ -1256,7 +1239,7 @@
         document.getElementById('userAvatar').textContent = (email || '??').substring(0,2).toUpperCase();
         currentUserEmail = email.toLowerCase();
         isAdminUser = !!(info && info.isAdmin);
-        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess(); loadPoFlowStatus();
+        loadDashboard(); loadRequests(); loadQueue(); loadCancelList(); loadRequestableProjects(); loadReportAccess();
       }).imsApprovalGetCurrentUserInfo();
     }
 
@@ -1281,7 +1264,6 @@
       if (pageId === 'purchaseRequest') loadRequests();
       if (pageId === 'approvalFlow') loadQueue();
       if (pageId === 'cancelEntry') loadCancelList();
-      if (pageId === 'poFlow') loadPoFlow();
       if (pageId === 'vendorMaster') loadVendors();
       if (pageId === 'materialMaster') loadMaterials();
     }
@@ -1323,7 +1305,7 @@
       }).imsApprovalGetCurrentUserInfo();
 
 
-      loadReportAccess(); loadPoFlowStatus();
+      loadReportAccess();
       loadDashboard();
     }
 
@@ -2102,7 +2084,6 @@
       if (queueSearch) {
         var q = queueSearch.toLowerCase();
         g = g.filter(function(item) {
-          if (item.isPo) return String(item.searchText || '').indexOf(q) !== -1;
           var po = item.poNo;
           if (!po) { var full = requestBySrNo(item.srNo); po = full && full.stages && full.stages.poEntry ? full.stages.poEntry.poNo : ''; }
           return (item.materialName || '').toLowerCase().indexOf(q) !== -1 || String(po || '').toLowerCase().indexOf(q) !== -1 ||
@@ -2143,7 +2124,7 @@
     function getBulkSelectableItems(stageKey) {
       var s = stageCfgByKey(stageKey);
       if (!canBulkApproveStage(s)) return [];
-      return queueGroup(stageKey).filter(function(item) { return !!item.canAct && !item.isPo; });
+      return queueGroup(stageKey).filter(function(item) { return !!item.canAct; });
     }
 
     function selectedCountForStage(stageKey) {
@@ -2225,7 +2206,6 @@
     }
 
     function buildQueueCardHtml(item, s) {
-      if (item.isPo) return buildPoQueueCardHtml(item, s);
       var doneLabel = s.statusValues.done;
       var stageLine = '<div class="queue-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b></div>';
       var approverLine = item.approver
@@ -2280,59 +2260,6 @@
       '</div>';
     }
 
-    /** One PO shown inside a stage card: PO No, project, supplier, indent nos, materials, amount and its stage table. */
-    function buildPoQueueCardHtml(item, s) {
-      var doneLabel = s.statusValues.done;
-      var cardKey = item.stageKey + '-' + item.srNo;
-      var isOpen = !!openQueueCards[cardKey];
-      var waitingOnHtml = (!item.canAct && item.blockedByStageName)
-        ? '<div class="queue-sub" style="text-align:right; margin-bottom:4px;">Waiting on: <b>' + escapeHtml(item.blockedByStageName) + '</b><br>(' + escapeHtml(item.blockedByApprover || 'no approver set') + ')</div>' : '';
-      var right = waitingOnHtml + (item.canAct
-        ? '<button class="btn small" onclick="poApproveFromQueue(' + item.poId + ', \'' + item.stageKey + '\')">Mark ' + escapeHtml(doneLabel) + '</button>'
-        : '<span class="pr-status pending" style="padding:6px 12px; font-size:12.5px;">' + ico('clock') + 'Pending Approval</span>');
-      var mats = item.items.map(function(i) {
-        return '<li>' + escapeHtml(i.materialName) + ' &mdash; ' + escapeHtml(String(i.quantity)) + ' ' + escapeHtml(i.uom || '') +
-          (i.indentNo ? ' <span style="color:var(--text-muted)">(Indent ' + escapeHtml(i.indentNo) + ')</span>' : '') + '</li>';
-      }).join('');
-      var stRows = item.stages.map(function(st) {
-        var color = st.done ? '#1a7f4b' : '#6b7280';
-        var extra = st.extra.filter(function(e) { return e.value; }).map(function(e) { return escapeHtml(e.label) + ': ' + escapeHtml(String(e.value)); }).join(', ');
-        return '<tr><td>' + escapeHtml(st.name) + '</td><td>' + escapeHtml(st.approver || '-') + '</td><td>' + escapeHtml(st.planned || '-') +
-          '</td><td>' + escapeHtml(st.actual || '-') + '</td><td>' + (st.delay === '' ? '-' : escapeHtml(String(st.delay))) +
-          '</td><td style="color:' + color + ';font-weight:600;">' + escapeHtml(st.status) + (extra ? '<div style="font-size:11px;color:var(--text-muted);">' + extra + '</div>' : '') + '</td></tr>';
-      }).join('');
-      var cancelBtn = item.canCancel
-        ? '<div style="padding:8px 14px;"><button class="btn outline" style="color:#b91c1c;border-color:#b91c1c;" onclick="poCancel(' + item.poId + ', \'' + escapeHtml(item.poNo).replace(/'/g, '') + '\')">Cancel whole PO</button></div>' : '';
-      return '<div class="qc-card' + (isOpen ? ' open' : '') + '" id="queue-card-' + cardKey + '">' +
-        '<div class="qc-head" onclick="toggleQueueCard(event, \'' + cardKey + '\')">' +
-          '<span class="queue-select-placeholder"></span><span class="qc-chev">' + ico('chevD') + '</span>' +
-          '<div class="qc-main">' +
-            '<div class="qc-tags"><span class="card-id-badge">PO</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
-            '<div class="qc-title">PO ' + escapeHtml(item.poNo) + ' &middot; ' + escapeHtml(item.vendorName || '') + '</div>' +
-            '<div class="qc-sub">' + item.items.length + ' material' + (item.items.length === 1 ? '' : 's') + ' &nbsp;|&nbsp; Indent No(s): <b>' + escapeHtml(item.indentNos.join(', ') || '-') + '</b> &nbsp;|&nbsp; PO Amount: <b>' + escapeHtml(String(item.poAmount)) + '</b></div>' +
-            '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName) + '</b>' + (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + ' &nbsp;|&nbsp; Planned: ' + escapeHtml(item.planned || '—') + '</div>' +
-          '</div><div class="qc-right">' + right + '</div></div>' +
-        '<div class="qc-body"><div style="padding:6px 14px;font-size:12.5px;color:var(--text-muted);">Payment terms: ' + escapeHtml(item.paymentTerms || '-') + ' &middot; Advance: ' + escapeHtml(item.advanceRequired) + '</div>' +
-          '<ul style="margin:4px 0 8px 32px;padding:0;font-size:13.5px;">' + mats + '</ul>' +
-          '<div style="overflow-x:auto;padding:0 14px 8px;"><table class="data-table"><thead><tr><th>Stage</th><th>Approver</th><th>Planned</th><th>Actual</th><th>Delay</th><th>Status</th></tr></thead><tbody>' + stRows + '</tbody></table></div>' +
-          cancelBtn + '</div></div>';
-    }
-
-    function poApproveFromQueue(poId, stageKey) {
-      var extra = {};
-      if (stageKey === 'delivery') {
-        var v = window.prompt('Challan No./Bill No.');
-        if (v === null) return;
-        if (!String(v).trim()) { alert('Challan No./Bill No. is required.'); return; }
-        extra.challanBillNo = String(v).trim();
-      }
-      google.script.run.withSuccessHandler(function(res) {
-        if (res && res.success) { loadQueue(); loadRequests(); }
-        else alert((res && res.error) || 'Failed.');
-      }).withFailureHandler(function() { alert('Server error. Please try again.'); })
-        .imsPoFlowActOnStage({ poId: poId, stageKey: stageKey, extraFields: extra, asEmail: testAsEmail || '' });
-    }
-
     var openQueueCards = {};
     var queueCardTab = {};
 
@@ -2371,11 +2298,6 @@
         return '<div class="glass-panel glass-empty">Nothing pending in this stage right now.</div>';
       }
       var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
-        if (item.isPo) {
-          return '<div class="glass-item"><div class="glass-item-main"><div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
-            '<div class="glass-item-sub">' + escapeHtml(item.project) + ' · ' + escapeHtml(item.vendorName || '') + '</div></div>' +
-            '<div class="glass-item-qty">' + escapeHtml(item.tileQty) + '</div></div>';
-        }
         var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity + (item.uom ? ' ' + item.uom : '') : '';
         return '<div class="glass-item"><div class="glass-item-main">' +
           '<div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
@@ -2532,90 +2454,6 @@
     }
 
     // ---------- NON PLANNED REPORT (only for users listed in REPORT_EMAILS) ----------
-    // ---------- PO FLOW ----------
-    var poFlowData = [];
-
-    function loadPoFlowStatus() {
-      // PO Flow now lives inside the Approval Flow stage cards; nothing to show in the menu.
-    }
-
-    function loadPoFlow() {
-      document.getElementById('poList').innerHTML = '<div class="spinner"></div>';
-      google.script.run.withSuccessHandler(function(res) {
-        poFlowData = (res && res.pos) || [];
-        renderPoFlow();
-      }).withFailureHandler(function(err) {
-        document.getElementById('poList').innerHTML = '<div class="empty-state">Could not load POs.</div>';
-      }).imsPoFlowList(testAsEmail || '');
-    }
-
-    function renderPoFlow() {
-      var q = (document.getElementById('poSearch').value || '').toLowerCase().trim();
-      var show = document.getElementById('poShow').value;
-      var list = poFlowData.filter(function(p) {
-        if (show === 'open' && (p.cancelled || p.status === 'Done')) return false;
-        if (show === 'done' && (p.cancelled || p.status !== 'Done')) return false;
-        if (show === 'cancelled' && !p.cancelled) return false;
-        if (!q) return true;
-        var hay = [p.poNo, p.vendorName, p.project, p.indentNos.join(' '), p.items.map(function(i){ return i.materialName; }).join(' ')].join(' ').toLowerCase();
-        return hay.indexOf(q) !== -1;
-      });
-      if (!list.length) { document.getElementById('poList').innerHTML = '<div class="empty-state">No POs to show.</div>'; return; }
-      document.getElementById('poList').innerHTML = list.map(function(p) {
-        var items = p.items.map(function(i) {
-          return '<li>' + escapeHtml(i.materialName) + ' &mdash; ' + escapeHtml(String(i.quantity)) + ' ' + escapeHtml(i.uom) +
-                 (i.indentNo ? ' <span style="color:var(--text-muted)">(Indent ' + escapeHtml(i.indentNo) + ')</span>' : '') + '</li>';
-        }).join('');
-        var stages = p.stages.map(function(s) {
-          var color = s.done ? '#1a7f4b' : (s.canAct ? '#b45309' : '#6b7280');
-          var btn = s.canAct ? ' <button class="btn" style="padding:4px 10px;font-size:12px;" onclick="poAct(' + p.poId + ',\'' + s.key + '\')">Approve</button>' : '';
-          var extra = s.extra.filter(function(e){ return e.value; }).map(function(e){ return escapeHtml(e.label) + ': ' + escapeHtml(String(e.value)); }).join(', ');
-          return '<tr><td>' + escapeHtml(s.name) + '</td><td>' + escapeHtml(s.approver || '-') + '</td><td>' + escapeHtml(s.planned || '-') +
-                 '</td><td>' + escapeHtml(s.actual || '-') + '</td><td>' + (s.delay === '' ? '-' : escapeHtml(String(s.delay))) +
-                 '</td><td style="color:' + color + ';font-weight:600;">' + escapeHtml(s.status) + btn + (extra ? '<div style="font-size:11px;color:var(--text-muted);">' + extra + '</div>' : '') + '</td></tr>';
-        }).join('');
-        var head = '<b>PO ' + escapeHtml(p.poNo) + '</b> &middot; ' + escapeHtml(p.project) + ' &middot; ' + escapeHtml(p.vendorName) +
-                   ' &middot; Amount: ' + escapeHtml(String(p.poAmount)) + (p.cancelled ? ' &middot; <span style="color:#b91c1c;font-weight:700;">CANCELLED</span>' : (p.status === 'Done' ? ' &middot; <span style="color:#1a7f4b;font-weight:700;">COMPLETED</span>' : ''));
-        var cancel = p.canCancel ? '<button class="btn outline" style="color:#b91c1c;border-color:#b91c1c;" onclick="poCancel(' + p.poId + ',\'' + escapeHtml(p.poNo).replace(/'/g, '') + '\')">Cancel whole PO</button>' : '';
-        var cinfo = p.cancelled ? '<div style="margin-top:6px;font-size:12.5px;color:#b91c1c;">Cancelled ' + escapeHtml(p.cancelledAt) + ' by ' + escapeHtml(p.cancelledBy) + ' &mdash; ' + escapeHtml(p.cancelReason) + '</div>' : '';
-        return '<div class="card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;"><div>' + head + '</div>' + cancel + '</div>' +
-               '<div style="margin:6px 0;font-size:12.5px;color:var(--text-muted);">Indent No(s): ' + escapeHtml(p.indentNos.join(', ') || '-') + ' &middot; Payment terms: ' + escapeHtml(p.paymentTerms || '-') + ' &middot; Advance: ' + escapeHtml(p.advanceRequired) + '</div>' +
-               '<ul style="margin:6px 0 10px 18px;padding:0;font-size:13.5px;">' + items + '</ul>' + cinfo +
-               '<div style="overflow-x:auto;"><table class="data-table" style="width:100%;font-size:13px;"><thead><tr><th>Stage</th><th>Approver</th><th>Planned</th><th>Actual</th><th>Delay</th><th>Status</th></tr></thead><tbody>' + stages + '</tbody></table></div></div>';
-      }).join('');
-    }
-
-    function poMsg(text, ok) {
-      var el = document.getElementById('poMsg');
-      el.textContent = text; el.className = 'msg ' + (ok ? 'success' : 'error'); el.style.display = text ? 'block' : 'none';
-    }
-
-    function poAct(poId, stageKey) {
-      var extra = {};
-      if (stageKey === 'delivery') {
-        var v = window.prompt('Challan No./Bill No.');
-        if (v === null) return;
-        if (!String(v).trim()) { poMsg('Challan No./Bill No. is required.', false); return; }
-        extra.challanBillNo = String(v).trim();
-      }
-      google.script.run.withSuccessHandler(function(res) {
-        if (res && res.success) { poMsg('Stage approved.', true); loadPoFlow(); }
-        else poMsg((res && res.error) || 'Failed.', false);
-      }).withFailureHandler(function() { poMsg('Server error. Please try again.', false); })
-        .imsPoFlowActOnStage({ poId: poId, stageKey: stageKey, extraFields: extra, asEmail: testAsEmail || '' });
-    }
-
-    function poCancel(poId, poNo) {
-      var reason = window.prompt('Cancel the WHOLE PO ' + poNo + ' (all its materials). Cancel reason:');
-      if (reason === null) return;
-      if (!String(reason).trim()) { poMsg('Cancel Reason is required.', false); return; }
-      google.script.run.withSuccessHandler(function(res) {
-        if (res && res.success) { poMsg('PO cancelled.', true); loadPoFlow(); loadCancelList(); loadQueue(); alert('PO cancelled.'); }
-        else poMsg((res && res.error) || 'Failed.', false);
-      }).withFailureHandler(function() { poMsg('Server error. Please try again.', false); })
-        .imsPoFlowCancel({ poId: poId, reason: String(reason).trim(), asEmail: testAsEmail || '' });
-    }
-
     function loadReportAccess() {
       google.script.run.withSuccessHandler(function(ok) {
         document.getElementById('navReport').style.display = ok ? '' : 'none';
