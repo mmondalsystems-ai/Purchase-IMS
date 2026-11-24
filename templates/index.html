@@ -1277,9 +1277,33 @@
       } catch (e) {}
     }
 
+    /** Filters (Approval Flow + Cancel Entry) are remembered for this tab and reapplied after a refresh. */
+    function saveFilters() {
+      try {
+        var cp = document.getElementById('cancelProjectFilter'), cs = document.getElementById('cancelSearchInput'),
+            qs = document.querySelector('.queueSearchInput');
+        sessionStorage.setItem('imsFilters', JSON.stringify({
+          qProject: queueProjectFilter || '', qSearch: qs ? qs.value : '',
+          cProject: cp ? cp.value : '', cSearch: cs ? cs.value : ''
+        }));
+      } catch (e) {}
+    }
+    function restoreFilters() {
+      try {
+        var f = JSON.parse(sessionStorage.getItem('imsFilters') || 'null');
+        if (!f) return;
+        if (f.qProject) setQueueProjectFilter(f.qProject);
+        if (f.qSearch) setQueueSearch(f.qSearch);
+        var cp = document.getElementById('cancelProjectFilter'), cs = document.getElementById('cancelSearchInput');
+        if (cp && f.cProject) cp.value = f.cProject;
+        if (cs && f.cSearch) cs.value = f.cSearch;
+      } catch (e) {}
+    }
+
     var pendingStageRestore = '';
     /** After a refresh: reopen the section that was open (the New Entry form always starts fresh). */
     function restorePage() {
+      restoreFilters();
       try {
         var p = sessionStorage.getItem('imsPage');
         if (!p || p === 'dashboard' || p === 'newEntry' || !document.getElementById('page-' + p)) return;
@@ -2120,12 +2144,14 @@
       document.querySelectorAll('.queueSearchInput').forEach(function(el) { if (el.value !== value) el.value = value; });
       selectedQueueItems = {};
       renderQueueTiles();
+      saveFilters();
     }
     function setQueueProjectFilter(value) {
       queueProjectFilter = value || '';
       document.querySelectorAll('.queueProjectFilter').forEach(function(el) { el.value = queueProjectFilter; });
       selectedQueueItems = {};
       renderQueueTiles();
+      saveFilters();
     }
     var currentStageDetailKey = null;
     var selectedQueueItems = {};
@@ -3108,6 +3134,10 @@
     }
 
     init();
+    ['cancelProjectFilter', 'cancelSearchInput'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.addEventListener('input', saveFilters); el.addEventListener('change', saveFilters); }
+    });
     restorePage();
   </script>
 
