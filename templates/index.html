@@ -852,7 +852,6 @@
         <div class="nav-item" data-page="purchaseRequest" onclick="purchaseRequestFocusSrNos=null; navigate('purchaseRequest', this)">📋 Purchase Request</div>
         <div class="nav-item" data-page="approvalFlow" onclick="navigate('approvalFlow', this)">✅ Approval Flow</div>
         <div class="nav-item" data-page="cancelEntry" onclick="navigate('cancelEntry', this)">🚫 Cancel Entry</div>
-        <div class="nav-item" id="navPoFlow" data-page="poFlow" style="display:none;" onclick="navigate('poFlow', this)">📦 PO Flow</div>
         <div class="nav-item" id="navReport" data-page="nonPlannedReport" style="display:none;" onclick="navigate('nonPlannedReport', this)">📊 Generate Report</div>
         <div class="nav-item" data-page="vendorMaster" onclick="navigate('vendorMaster', this)">👥 Vendor Master</div>
         <div class="nav-item" data-page="materialMaster" onclick="navigate('materialMaster', this)">📦 Material Master</div>
@@ -2106,6 +2105,7 @@
       if (queueSearch) {
         var q = queueSearch.toLowerCase();
         g = g.filter(function(item) {
+          if (item.isPo) return String(item.searchText || '').indexOf(q) !== -1;
           var po = item.poNo;
           if (!po) { var full = requestBySrNo(item.srNo); po = full && full.stages && full.stages.poEntry ? full.stages.poEntry.poNo : ''; }
           return (item.materialName || '').toLowerCase().indexOf(q) !== -1 || String(po || '').toLowerCase().indexOf(q) !== -1 ||
@@ -2146,7 +2146,7 @@
     function getBulkSelectableItems(stageKey) {
       var s = stageCfgByKey(stageKey);
       if (!canBulkApproveStage(s)) return [];
-      return queueGroup(stageKey).filter(function(item) { return !!item.canAct; });
+      return queueGroup(stageKey).filter(function(item) { return !!item.canAct && !item.isPo; });
     }
 
     function selectedCountForStage(stageKey) {
@@ -2228,6 +2228,7 @@
     }
 
     function buildQueueCardHtml(item, s) {
+      if (item.isPo) return buildPoQueueCardHtml(item, s);
       var doneLabel = s.statusValues.done;
       var stageLine = '<div class="queue-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b></div>';
       var approverLine = item.approver
@@ -2282,6 +2283,59 @@
       '</div>';
     }
 
+    /** One PO shown inside a stage card: PO No, project, supplier, indent nos, materials, amount and its stage table. */
+    function buildPoQueueCardHtml(item, s) {
+      var doneLabel = s.statusValues.done;
+      var cardKey = item.stageKey + '-' + item.srNo;
+      var isOpen = !!openQueueCards[cardKey];
+      var waitingOnHtml = (!item.canAct && item.blockedByStageName)
+        ? '<div class="queue-sub" style="text-align:right; margin-bottom:4px;">Waiting on: <b>' + escapeHtml(item.blockedByStageName) + '</b><br>(' + escapeHtml(item.blockedByApprover || 'no approver set') + ')</div>' : '';
+      var right = waitingOnHtml + (item.canAct
+        ? '<button class="btn small" onclick="poApproveFromQueue(' + item.poId + ', \'' + item.stageKey + '\')">Mark ' + escapeHtml(doneLabel) + '</button>'
+        : '<span class="pr-status pending" style="padding:6px 12px; font-size:12.5px;">' + ico('clock') + 'Pending Approval</span>');
+      var mats = item.items.map(function(i) {
+        return '<li>' + escapeHtml(i.materialName) + ' &mdash; ' + escapeHtml(String(i.quantity)) + ' ' + escapeHtml(i.uom || '') +
+          (i.indentNo ? ' <span style="color:var(--text-muted)">(Indent ' + escapeHtml(i.indentNo) + ')</span>' : '') + '</li>';
+      }).join('');
+      var stRows = item.stages.map(function(st) {
+        var color = st.done ? '#1a7f4b' : '#6b7280';
+        var extra = st.extra.filter(function(e) { return e.value; }).map(function(e) { return escapeHtml(e.label) + ': ' + escapeHtml(String(e.value)); }).join(', ');
+        return '<tr><td>' + escapeHtml(st.name) + '</td><td>' + escapeHtml(st.approver || '-') + '</td><td>' + escapeHtml(st.planned || '-') +
+          '</td><td>' + escapeHtml(st.actual || '-') + '</td><td>' + (st.delay === '' ? '-' : escapeHtml(String(st.delay))) +
+          '</td><td style="color:' + color + ';font-weight:600;">' + escapeHtml(st.status) + (extra ? '<div style="font-size:11px;color:var(--text-muted);">' + extra + '</div>' : '') + '</td></tr>';
+      }).join('');
+      var cancelBtn = item.canCancel
+        ? '<div style="padding:8px 14px;"><button class="btn outline" style="color:#b91c1c;border-color:#b91c1c;" onclick="poCancel(' + item.poId + ', \'' + escapeHtml(item.poNo).replace(/'/g, '') + '\')">Cancel whole PO</button></div>' : '';
+      return '<div class="qc-card' + (isOpen ? ' open' : '') + '" id="queue-card-' + cardKey + '">' +
+        '<div class="qc-head" onclick="toggleQueueCard(event, \'' + cardKey + '\')">' +
+          '<span class="queue-select-placeholder"></span><span class="qc-chev">' + ico('chevD') + '</span>' +
+          '<div class="qc-main">' +
+            '<div class="qc-tags"><span class="card-id-badge">PO</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
+            '<div class="qc-title">PO ' + escapeHtml(item.poNo) + ' &middot; ' + escapeHtml(item.vendorName || '') + '</div>' +
+            '<div class="qc-sub">' + item.items.length + ' material' + (item.items.length === 1 ? '' : 's') + ' &nbsp;|&nbsp; Indent No(s): <b>' + escapeHtml(item.indentNos.join(', ') || '-') + '</b> &nbsp;|&nbsp; PO Amount: <b>' + escapeHtml(String(item.poAmount)) + '</b></div>' +
+            '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName) + '</b>' + (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + ' &nbsp;|&nbsp; Planned: ' + escapeHtml(item.planned || '—') + '</div>' +
+          '</div><div class="qc-right">' + right + '</div></div>' +
+        '<div class="qc-body"><div style="padding:6px 14px;font-size:12.5px;color:var(--text-muted);">Payment terms: ' + escapeHtml(item.paymentTerms || '-') + ' &middot; Advance: ' + escapeHtml(item.advanceRequired) + '</div>' +
+          '<ul style="margin:4px 0 8px 32px;padding:0;font-size:13.5px;">' + mats + '</ul>' +
+          '<div style="overflow-x:auto;padding:0 14px 8px;"><table class="data-table"><thead><tr><th>Stage</th><th>Approver</th><th>Planned</th><th>Actual</th><th>Delay</th><th>Status</th></tr></thead><tbody>' + stRows + '</tbody></table></div>' +
+          cancelBtn + '</div></div>';
+    }
+
+    function poApproveFromQueue(poId, stageKey) {
+      var extra = {};
+      if (stageKey === 'delivery') {
+        var v = window.prompt('Challan No./Bill No.');
+        if (v === null) return;
+        if (!String(v).trim()) { alert('Challan No./Bill No. is required.'); return; }
+        extra.challanBillNo = String(v).trim();
+      }
+      google.script.run.withSuccessHandler(function(res) {
+        if (res && res.success) { loadQueue(); loadRequests(); }
+        else alert((res && res.error) || 'Failed.');
+      }).withFailureHandler(function() { alert('Server error. Please try again.'); })
+        .imsPoFlowActOnStage({ poId: poId, stageKey: stageKey, extraFields: extra, asEmail: testAsEmail || '' });
+    }
+
     var openQueueCards = {};
     var queueCardTab = {};
 
@@ -2320,6 +2374,11 @@
         return '<div class="glass-panel glass-empty">Nothing pending in this stage right now.</div>';
       }
       var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
+        if (item.isPo) {
+          return '<div class="glass-item"><div class="glass-item-main"><div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
+            '<div class="glass-item-sub">' + escapeHtml(item.project) + ' · ' + escapeHtml(item.vendorName || '') + '</div></div>' +
+            '<div class="glass-item-qty">' + escapeHtml(item.tileQty) + '</div></div>';
+        }
         var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity + (item.uom ? ' ' + item.uom : '') : '';
         return '<div class="glass-item"><div class="glass-item-main">' +
           '<div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
@@ -2480,11 +2539,7 @@
     var poFlowData = [];
 
     function loadPoFlowStatus() {
-      google.script.run.withSuccessHandler(function(st) {
-        document.getElementById('navPoFlow').style.display = (st && st.enabled) ? '' : 'none';
-      }).withFailureHandler(function() {
-        document.getElementById('navPoFlow').style.display = 'none';
-      }).imsPoFlowStatus();
+      // PO Flow now lives inside the Approval Flow stage cards; nothing to show in the menu.
     }
 
     function loadPoFlow() {
@@ -2558,7 +2613,7 @@
       if (reason === null) return;
       if (!String(reason).trim()) { poMsg('Cancel Reason is required.', false); return; }
       google.script.run.withSuccessHandler(function(res) {
-        if (res && res.success) { poMsg('PO cancelled.', true); loadPoFlow(); loadCancelList(); }
+        if (res && res.success) { poMsg('PO cancelled.', true); loadPoFlow(); loadCancelList(); loadQueue(); alert('PO cancelled.'); }
         else poMsg((res && res.error) || 'Failed.', false);
       }).withFailureHandler(function() { poMsg('Server error. Please try again.', false); })
         .imsPoFlowCancel({ poId: poId, reason: String(reason).trim(), asEmail: testAsEmail || '' });

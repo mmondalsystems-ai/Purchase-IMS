@@ -511,3 +511,46 @@ def tracker_rows(user):
             row[nm + " Delay"] = s["delay"] if s else ""
         rows.append(row)
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Queue entries for the Approval Flow stage cards (one entry per PO per pending stage)
+# ---------------------------------------------------------------------------
+def queue_entries(user, as_email=None):
+    """Same shape idea as the item queue: one entry per (PO, pending stage) the user may see.
+    Rate Approval, Advance Payment, Delivery, GRN and Truck Entry cards show POs instead of items."""
+    data = list_pos(user, as_email)
+    if not data.get("enabled"):
+        return []
+    _, _, current, is_admin = _identity(user, as_email)
+    with db.connection() as conn:
+        planned = {(r["po_id"], r["stage_key"]): r["planned_at"] for r in
+                   conn.execute("select po_id, stage_key, planned_at from ims_po_stages").fetchall()}
+    out = []
+    for po in data["pos"]:
+        if po["cancelled"]:
+            continue
+        materials = "; ".join("%s (%s %s)" % (i["materialName"], i["quantity"], i["uom"]) for i in po["items"])
+        for idx, s in enumerate(po["stages"]):
+            if s["done"] or not s["isMine"]:
+                continue
+            if is_admin and not s["approver"]:
+                continue
+            blocker = next((p for p in po["stages"][:idx] if not p["done"]), None)
+            out.append({
+                "isPo": True, "poId": po["poId"], "srNo": "PO%s" % po["poId"], "poNo": po["poNo"],
+                "project": po["project"], "materialName": "PO " + po["poNo"],
+                "materialType": po["materialType"], "vendorName": po["vendorName"], "poAmount": po["poAmount"],
+                "paymentTerms": po["paymentTerms"], "advanceRequired": po["advanceRequired"],
+                "indentNos": po["indentNos"], "items": po["items"], "stages": po["stages"],
+                "canCancel": po["canCancel"],
+                "tileQty": "%d item%s" % (len(po["items"]), "" if len(po["items"]) == 1 else "s"),
+                "searchText": " ".join([po["poNo"], po["vendorName"], po["project"], materials, " ".join(po["indentNos"])]).lower(),
+                "stageKey": s["key"], "stageName": s["name"], "planned": s["planned"], "status": s["status"],
+                "approver": s["approver"], "canAct": s["canAct"],
+                "blockedByStageKey": blocker["key"] if blocker else "",
+                "blockedByStageName": blocker["name"] if blocker else "",
+                "blockedByApprover": blocker["approver"] if blocker else "",
+                "_plannedDt": planned.get((po["poId"], s["key"])),
+            })
+    return out

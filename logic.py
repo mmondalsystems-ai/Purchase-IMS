@@ -892,6 +892,9 @@ def imsApprovalGetMyQueue(user, asEmail=None):
                 "_plannedDt": sd["_plannedDt"],
             })
 
+    if in_po:
+        queue.extend(po_flow.queue_entries(user, asEmail))  # PO entries replace the item entries of PO'd materials
+
     far = dt.datetime.max.replace(tzinfo=dt.timezone.utc)
     queue.sort(key=lambda q: (q["_plannedDt"] is None, _as_tz(q["_plannedDt"]) if q["_plannedDt"] else far))
     for q in queue:
