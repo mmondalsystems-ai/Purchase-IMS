@@ -2127,9 +2127,9 @@
     /** Items of one stage, narrowed to the selected project filter (if any). */
     var queueSearch = '';
     function queueGroup(stageKey) {
-      // Materials are listed Z to A by name in every Approval Flow card and list.
+      // Newest Sr No first (20, 19, 18 ...) in every Approval Flow card and list.
       var g = (queueByStage[stageKey] || []).slice().sort(function(a, b) {
-        return String(b.materialName || '').toLowerCase().localeCompare(String(a.materialName || '').toLowerCase());
+        return Number(b.srNo) - Number(a.srNo);
       });
       if (queueProjectFilter) g = g.filter(function(item) { return (item.project || '').toLowerCase() === queueProjectFilter.toLowerCase(); });
       if (queueSearch) {
