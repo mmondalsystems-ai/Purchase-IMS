@@ -327,10 +327,11 @@ def get_approver_name(stage_key, project, material_type, po_amount, stage_cfg) -
     if stage.get("computedApprover"):
         if po_amount is None or po_amount == "":
             return ""
-        try:
-            amt = float(po_amount)
-        except (TypeError, ValueError):
+        # Tolerant parse: "1,25,000", "Rs 50000/-" and an amount the sheet turned into a date all work.
+        parsed = _parse_amount(po_amount)
+        if parsed is None:
             return ""
+        amt = float(parsed)
         if amt != amt:  # NaN
             return ""
         mt = str(material_type or "").strip().upper()
@@ -923,6 +924,8 @@ def _clean_extra(key, value):
         return ""
     if key == "poAmount":
         d = _parse_decimal(value)
+        if d is None and str(value).strip() != "":
+            d = _parse_amount(value)  # "1,25,000", "Rs 50000/-" or a date the sheet made of the amount
         if d is not None and str(value).strip() != "":
             return int(d) if d == d.to_integral_value() else float(d)
         return str(value).strip()
