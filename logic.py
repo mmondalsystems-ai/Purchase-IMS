@@ -128,7 +128,7 @@ def get_next_stage_key(current_key, advance_required):
         return None
     if current_key == "rateApproval":
         return "advancePayment" if advance_required == "Yes" else "delivery"
-    return cfg.STAGE_DEFS[idx + 1]["key"]
+    return cfg.STAGE_DEFS[idx + 1]["key"]  # (advancePosting -> rateApproval: never the last stage)
 
 
 def get_prev_stage_key(current_key, advance_required):
@@ -142,6 +142,8 @@ def get_prev_stage_key(current_key, advance_required):
     prev_key = cfg.STAGE_DEFS[idx - 1]["key"]
     if prev_key == "advancePayment":
         return "rateApproval"
+    if prev_key == "advancePosting":
+        return "poEntry"  # Advance Posting in Highrise is outside the chain; it never blocks Rate Approval
     return prev_key
 
 
@@ -511,6 +513,8 @@ def _initialize_stages(conn, sr_no, project, material_type, base_ts, stage_cfg):
         key = stage["key"]
         if key == "advancePayment":
             continue  # set later, only if actually required
+        if key == "advancePosting":
+            continue  # set when PO Preparation is approved with Advance Payment Required = Yes
         if key == "delivery":
             planned = planned_after(po_prep_planned, 15)
         elif key == "poEntry":
@@ -835,6 +839,10 @@ def imsApprovalGetMyQueue(user, asEmail=None):
             if stage["key"] == "advancePayment":
                 if (req["stages"].get("poEntry") or {}).get("advancePaymentRequired") != "Yes":
                     continue
+            if stage["key"] == "advancePosting":
+                # only after PO Preparation with Advance Payment = Yes (that is when its planned date is set)
+                if (req["stages"].get("poEntry") or {}).get("advancePaymentRequired") != "Yes" or not sd.get("_plannedDt"):
+                    continue
             done_label = status_values(stage["key"])["done"]
             pending_and_unlocked = sd["status"] != done_label and bool(sd["approver"])
             # Admins: every pending, unlocked stage. Everyone else: every stage assigned to them that is
@@ -964,6 +972,9 @@ def _act_on_stage(user, payload):
         if stage_key == "advancePayment" and adv_req != "Yes":
             raise UserError("Advance Payment Stage is not applicable for this request.")
 
+        if stage_key == "advancePosting" and adv_req != "Yes":
+            raise UserError("Advance Posting in Highrise Stage is not applicable for this request.")
+
         prev_key = get_prev_stage_key(stage_key, adv_req)
         if prev_key:
             prev = stages.get(prev_key)
@@ -1030,8 +1041,22 @@ def _act_on_stage(user, payload):
                     (req["sr_no"], adv_planned, status_values("advancePayment")["pending"]),
                 )
 
+        if stage_key == "poEntry" and adv_now == "Yes":
+            _set_advance_posting(conn, req["sr_no"], stages.get("rateApproval"), ts, project, material_type, ctx)
+
         if not get_next_stage_key(stage_key, adv_now):
             conn.execute("update ims_requests set status = 'Done' where sr_no = %s", (req["sr_no"],))
+
+
+def _set_advance_posting(conn, sr_no, rate_row, ts, project, material_type, ctx):
+    """Advance Posting in Highrise: planned on the SAME date as Rate Approval's planned date."""
+    planned = (rate_row["planned_at"] if rate_row else None) or planned_after(ts, 1)
+    approver = get_approver_name("advancePosting", project, material_type, "", ctx["stage_cfg"])
+    conn.execute(
+        "insert into ims_request_stages (sr_no, stage_key, approver, planned_at, status) values (%s,'advancePosting',%s,%s,%s) "
+        "on conflict (sr_no, stage_key) do update set approver = excluded.approver, planned_at = excluded.planned_at "
+        "where ims_request_stages.actual_at is null",
+        (sr_no, approver or "", planned, status_values("advancePosting")["pending"]))
 
 
 def db_json(value):
@@ -1081,6 +1106,10 @@ def _edit_po_entry(user, payload):
 
         rate = stages.get("rateApproval")
         rate_done = bool(rate) and rate["status"] == status_values("rateApproval")["done"]
+        posting_row = stages.get("advancePosting")
+        if (posting_row and posting_row["actual_at"] is not None
+                and new.get("advancePaymentRequired") != old.get("advancePaymentRequired")):
+            raise UserError("Advance Payment Required cannot be changed after Advance Posting in Highrise is done.")
         if rate_done and (str(new.get("poAmount", "")) != str(old.get("poAmount", ""))
                           or new.get("advancePaymentRequired") != old.get("advancePaymentRequired")):
             raise UserError("PO Amount and Advance Payment Required cannot be changed after Rate Approval is done.")
@@ -1095,6 +1124,13 @@ def _edit_po_entry(user, payload):
                 "on conflict (sr_no, stage_key) do update set approver = excluded.approver",
                 (req["sr_no"], rate_name or "", status_values("rateApproval")["pending"]),
             )
+        if new.get("advancePaymentRequired") != old.get("advancePaymentRequired"):
+            posting = stages.get("advancePosting")
+            if new.get("advancePaymentRequired") == "Yes":
+                _set_advance_posting(conn, req["sr_no"], stages.get("rateApproval"), now(), project, material_type, ctx)
+            elif posting and posting["actual_at"] is None:
+                conn.execute("update ims_request_stages set planned_at = null where sr_no = %s and stage_key = 'advancePosting'",
+                             (req["sr_no"],))
         log.info("PO Preparation details of request %s edited by %s", req["sr_no"], current)
 
 

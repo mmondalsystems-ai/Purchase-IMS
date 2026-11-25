@@ -42,7 +42,7 @@ var ImsSupabaseSync_REQ_KEYS = [
 ];
 var ImsSupabaseSync_STAGE_KEYS = [
   'approval', 'approval2', 'wbs', 'indent', 'poRate', 'poEntry', 'rateApproval',
-  'advancePayment', 'delivery', 'grn', 'truckEntry'
+  'advancePayment', 'delivery', 'grn', 'truckEntry', 'advancePosting'
 ];
 var ImsSupabaseSync_STAGE_FIELDS = ['approver', 'planned_at', 'actual_at', 'delay_days', 'status', 'approved_by'];
 var ImsSupabaseSync_EXTRA_KEYS = [
@@ -556,7 +556,8 @@ function ImsSupabaseSync_stageAliases_() {
     approval: 'Approval Stage', approval2: '2nd Approval Stage', wbs: 'WBS Stage', indent: 'Indent Stage',
     poRate: 'PO Rate Stage', poEntry: 'PO Preparation Stage', rateApproval: 'Rate Approval Stage',
     advancePayment: 'Advance Payment Stage', delivery: 'Delivery Stage',
-    grn: 'GRN Stage', truckEntry: 'Truck Entry Stage'
+    grn: 'GRN Stage', truckEntry: 'Truck Entry Stage',
+    advancePosting: 'Advance Posting in Highrise Stage'
   };
   var fieldLabels = {
     approver: 'Approver', planned_at: 'Planned Date', actual_at: 'Actual Date',

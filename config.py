@@ -35,6 +35,9 @@ STAGE_DEFS = [
          {"key": "paymentTerms", "label": "Payment Terms"},
          {"key": "advancePaymentRequired", "label": "Advance Payment Required"},
      ]},
+    # Advance Posting in Highrise: only when Advance Payment Required = Yes; planned = Rate Approval planned date.
+    # It sits outside the approval chain: it never blocks Rate Approval or any later stage.
+    {"key": "advancePosting", "name": "Advance Posting in Highrise Stage", "conditional": True},
     {"key": "rateApproval", "name": "Rate Approval Stage", "computedApprover": True},
     {"key": "advancePayment", "name": "Advance Payment Stage", "conditional": True},
     {"key": "delivery", "name": "Delivery Stage",

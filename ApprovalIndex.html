@@ -1873,6 +1873,10 @@
     }
 
     function isStageApplicable(req, key) {
+      if (key === 'advancePosting') {
+        var advP = req.stages['poEntry'] && req.stages['poEntry'].advancePaymentRequired;
+        return advP === 'Yes' && !!(req.stages[key] && req.stages[key].planned);
+      }
       if (key !== 'advancePayment') return true;
       var advReq = req.stages['poEntry'] && req.stages['poEntry'].advancePaymentRequired;
       return advReq === 'Yes';
@@ -2123,7 +2127,10 @@
     /** Items of one stage, narrowed to the selected project filter (if any). */
     var queueSearch = '';
     function queueGroup(stageKey) {
-      var g = queueByStage[stageKey] || [];
+      // Materials are listed Z to A by name in every Approval Flow card and list.
+      var g = (queueByStage[stageKey] || []).slice().sort(function(a, b) {
+        return String(b.materialName || '').toLowerCase().localeCompare(String(a.materialName || '').toLowerCase());
+      });
       if (queueProjectFilter) g = g.filter(function(item) { return (item.project || '').toLowerCase() === queueProjectFilter.toLowerCase(); });
       if (queueSearch) {
         var q = queueSearch.toLowerCase();
