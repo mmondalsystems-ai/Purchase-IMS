@@ -2144,7 +2144,78 @@
                  String(item.srNo) === q;
         });
       }
-      return g;
+      return collapsePoLines(stageKey, g);
+    }
+
+    /** PO grouping (display only): after PO Preparation, every material of one PO entry is shown as ONE line.
+     * Key = project + PO No + PO Preparation time (minute) + material type. The data stays material-wise. */
+    function poGroupKeyOf(req) {
+      var po = req && req.stages && req.stages.poEntry;
+      if (!po || !po.poNo) return '';
+      return [req.project, String(po.poNo).trim().toUpperCase(), po.actual || '', req.materialType || ''].join('|');
+    }
+    function isPostPoStage(stageKey) {
+      var iPo = -1, iSt = -1;
+      stageConfig.forEach(function(s, i) { if (s.key === 'poEntry') iPo = i; if (s.key === stageKey) iSt = i; });
+      return iPo >= 0 && iSt > iPo;
+    }
+    function buildPoLine(members, keepStage) {
+      members = members.slice().sort(function(a, b) { return Number(b.srNo) - Number(a.srNo); });
+      var rep = members[0], full = requestBySrNo(rep.srNo);
+      var line = {}; Object.keys(rep).forEach(function(k) { line[k] = rep[k]; });
+      var po = (full && full.stages && full.stages.poEntry) || {};
+      line.isPoGroup = members.length > 0;
+      line.members = members;
+      line.vendorName = po.vendorName || rep.vendorName || '';
+      line.poNo = po.poNo || rep.poNo || '';
+      line.canAct = members.some(function(m) { return !!m.canAct; });
+      var planned = members.map(function(m) { return m.planned || ''; }).filter(Boolean).sort();
+      if (planned.length) line.planned = planned[0];
+      return line;
+    }
+    function collapsePoLines(stageKey, items) {
+      if (!isPostPoStage(stageKey)) return items;
+      var order = [], map = {};
+      items.forEach(function(item) {
+        var k = poGroupKeyOf(requestBySrNo(item.srNo));
+        if (!k) { order.push({ single: item }); return; }
+        if (!map[k]) { map[k] = []; order.push({ key: k }); }
+        map[k].push(item);
+      });
+      return order.map(function(o) { return o.single ? o.single : buildPoLine(map[o.key]); });
+    }
+    function expandPoLines(items) {
+      var out = [];
+      items.forEach(function(it) { if (it.isPoGroup) it.members.forEach(function(m) { if (m.canAct) out.push(m); }); else out.push(it); });
+      return out;
+    }
+    function actOnPoLine(stageKey, srNo) {
+      var line = queueGroup(stageKey).filter(function(i) { return Number(i.srNo) === Number(srNo); })[0];
+      if (!line) return;
+      var members = expandPoLines([line]);
+      var s = stageCfgByKey(stageKey);
+      if (s && s.extra && s.extra.length) { openBulkExtraFieldsModal(stageKey, members); return; }
+      if (!confirm('Mark ' + s.statusValues.done + ' for all ' + members.length + ' material' + (members.length === 1 ? '' : 's') + ' of PO ' + (line.poNo || '') + '?')) return;
+      bulkRun().withSuccessHandler(function(res) {
+        var results = (res && res.results) || [];
+        var ok = results.filter(function(r) { return r.success; });
+        if (ok.length) removeManyFromQueueLocally(ok);
+        loadDashboard(); loadQueue(); loadRequests();
+        var bad = results.filter(function(r) { return !r.success; });
+        if (bad.length) alert(ok.length + ' approved. ' + bad.length + ' failed.\n\n' + bad.slice(0, 5).map(function(r) { return '#' + r.srNo + ': ' + (r.error || 'Failed'); }).join('\n'));
+      }).withFailureHandler(function(err) { alert(err.message || 'Failed to approve.'); })
+      .imsApprovalActOnStages({ items: members.map(function(m) { return { srNo: m.srNo, stageKey: m.stageKey }; }), asEmail: testAsEmail || '' });
+    }
+    function poMembersTableHtml(item) {
+      return '<table class="po-members" style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<tr style="text-align:left;"><th style="padding:4px 8px;">Sr No</th><th style="padding:4px 8px;">Material</th><th style="padding:4px 8px;">Qty</th><th style="padding:4px 8px;">Indent No</th></tr>' +
+        item.members.map(function(m) {
+          var f = requestBySrNo(m.srNo) || {};
+          var ind = (f.stages && f.stages.indent && f.stages.indent.indentNo) || m.indentNo || '';
+          var qty = (m.quantity !== '' && m.quantity != null ? m.quantity : '') + (m.uom ? ' ' + m.uom : '');
+          return '<tr style="border-top:1px solid #e5e7eb;"><td style="padding:4px 8px;">#' + m.srNo + '</td><td style="padding:4px 8px;">' + escapeHtml(m.materialName) +
+            '</td><td style="padding:4px 8px;">' + escapeHtml(qty) + '</td><td style="padding:4px 8px;">' + escapeHtml(ind) + '</td></tr>';
+        }).join('') + '</table>';
     }
     function setQueueSearch(value) {
       queueSearch = (value || '').trim();
@@ -2282,6 +2353,11 @@
       var actionHtml = item.canAct
         ? '<button class="btn small" onclick="openModal(' + item.srNo + ', \'' + item.stageKey + '\')">Mark ' + doneLabel + '</button>'
         : '<span class="pill pending">' + item.status + '</span>';
+      if (item.isPoGroup) {
+        actionHtml = item.canAct
+          ? '<button class="btn small" onclick="actOnPoLine(\'' + item.stageKey + '\', ' + item.srNo + ')">Mark ' + doneLabel + ' (' + item.members.length + ')</button>'
+          : '<span class="pill pending">' + item.status + '</span>';
+      }
       var cardKey = item.stageKey + '-' + item.srNo;
       var isOpen = !!openQueueCards[cardKey];
       var tab = queueCardTab[cardKey] || 'details';
@@ -2298,7 +2374,9 @@
           '<span class="qc-chev">' + ico('chevD') + '</span>' +
           '<div class="qc-main">' +
             '<div class="qc-tags"><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
-            '<div class="qc-title">' + escapeHtml(item.materialName) + '</div>' +
+            '<div class="qc-title">' + (item.isPoGroup
+              ? escapeHtml(item.vendorName || 'Vendor') + ' · PO ' + escapeHtml(item.poNo) + ' <span style="font-weight:400;font-size:12px;">(' + item.members.length + ' material' + (item.members.length === 1 ? '' : 's') + ')</span>'
+              : escapeHtml(item.materialName)) + '</div>' +
             '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b>' +
               (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + '</div>' +
             '<div class="qc-sub">Planned: ' + escapeHtml(item.planned || '—') + (item.estimatedDeliveryDate ? ' &nbsp;|&nbsp; EDD: ' + escapeHtml(item.estimatedDeliveryDate) : '') + '</div>' +
@@ -2310,8 +2388,8 @@
             '<button class="qc-tab' + (tab === 'details' ? ' active' : '') + '" onclick="setQueueTab(event, \'' + cardKey + '\', \'details\')">' + ico('doc') + 'Request Details</button>' +
             '<button class="qc-tab' + (tab === 'flow' ? ' active' : '') + '" onclick="setQueueTab(event, \'' + cardKey + '\', \'flow\')">' + ico('flow') + 'Approval Flow</button>' +
           '</div>' +
-          '<div class="qc-pane' + (tab === 'details' ? ' active' : '') + '" data-pane="details">' + buildMaterialDetailsHtml(item) + '</div>' +
-          '<div class="qc-pane' + (tab === 'flow' ? ' active' : '') + '" data-pane="flow" style="padding:0 0 10px;">' + flowPane + '</div>' +
+          '<div class="qc-pane' + (tab === 'details' ? ' active' : '') + '" data-pane="details">' + (item.isPoGroup ? poMembersTableHtml(item) : buildMaterialDetailsHtml(item)) + '</div>' +
+          '<div class="qc-pane' + (tab === 'flow' ? ' active' : '') + '" data-pane="flow" style="padding:0 0 10px;">' + (item.isPoGroup ? '<div class="empty-state">Open a material from Request Details to see its own flow.</div>' : flowPane) + '</div>' +
         '</div>' +
       '</div>';
     }
@@ -2360,9 +2438,12 @@
       }
       var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
         var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity + (item.uom ? ' ' + item.uom : '') : '';
+        var gname = item.isPoGroup ? (item.vendorName || 'Vendor') + ' · PO ' + item.poNo : item.materialName;
+        var gsub = item.isPoGroup ? item.members.length + ' materials · ' + item.project : '#' + item.srNo + ' · ' + item.project;
+        if (item.isPoGroup) qty = '';
         return '<div class="glass-item"><div class="glass-item-main">' +
-          '<div class="glass-item-name">' + escapeHtml(item.materialName) + '</div>' +
-          '<div class="glass-item-sub">#' + item.srNo + ' · ' + escapeHtml(item.project) + '</div></div>' +
+          '<div class="glass-item-name">' + escapeHtml(gname) + '</div>' +
+          '<div class="glass-item-sub">' + escapeHtml(gsub) + '</div></div>' +
           (qty ? '<div class="glass-item-qty">' + escapeHtml(qty) + '</div>' : '') + '</div>';
       }).join('');
       var extra = group.length - TILE_PREVIEW_LIMIT;
@@ -2515,6 +2596,7 @@
         return !!selectedQueueItems[queueItemKey(item.stageKey, item.srNo)];
       });
       if (!selectedItems.length) return;
+      selectedItems = expandPoLines(selectedItems);
       var s = stageCfgByKey(stageKey);
       // Stages with required extra fields (currently just PO Preparation Stage) collect
       // those fields ONCE via a modal, then apply them to every selected request —
@@ -2655,7 +2737,43 @@
       var list = document.getElementById('cancelList');
       var shown = cancelFilteredRequests();
       if (!allRequests.length) { list.innerHTML = '<div class="empty-state">No requests yet.</div>'; updateCancelToolbar(); return; }
-      list.innerHTML = shown.length ? shown.map(renderCancelCard).join('') : '<div class="empty-state">No request matches this filter.</div>';
+      var order = [], map = {};
+      shown.forEach(function(r) {
+        var k = (r.poApproved && !r.cancelled) ? poGroupKeyOf(r) : '';
+        if (!k) { order.push({ single: r }); return; }
+        if (!map[k]) { map[k] = []; order.push({ key: k }); }
+        map[k].push(r);
+      });
+      var html = order.map(function(o) { return o.single ? renderCancelCard(o.single) : renderCancelPoCard(map[o.key]); }).join('');
+      list.innerHTML = shown.length ? html : '<div class="empty-state">No request matches this filter.</div>';
+      updateCancelToolbar();
+    }
+
+    /** One merged line per PO (all materials of one PO entry). Cancelling it cancels every material. Admin only. */
+    function renderCancelPoCard(members) {
+      members = members.slice().sort(function(a, b) { return Number(b.srNo) - Number(a.srNo); });
+      var rep = members[0], po = (rep.stages && rep.stages.poEntry) || {};
+      var nums = members.map(function(m) { return m.srNo; });
+      var canCancel = members.every(function(m) { return m.canCancel; });
+      var allSel = nums.every(function(n) { return cancelSelected[n]; });
+      var pick = canCancel
+        ? '<label class="queue-select" title="Select whole PO"><input type="checkbox" ' + (allSel ? 'checked' : '') +
+          ' onchange="toggleCancelPo([' + nums.join(',') + '], this.checked)"></label>'
+        : '<span class="queue-select-placeholder"></span>';
+      var rows = members.map(function(m) {
+        var ind = (m.stages && m.stages.indent && m.stages.indent.indentNo) || '';
+        return '<div class="req-sub">#' + m.srNo + ' · ' + escapeHtml(m.materialName) + ' · Qty ' + escapeHtml(String(m.quantity)) + (m.uom ? ' ' + escapeHtml(m.uom) : '') +
+          (ind ? ' · Indent ' + escapeHtml(ind) : '') + '</div>';
+      }).join('');
+      var action = canCancel
+        ? '<button class="btn small danger" onclick="openCancelModal(null, [' + nums.join(',') + '])">Cancel whole PO</button>'
+        : '<span class="restricted-note">Only an admin can cancel a PO</span>';
+      return '<div class="req-card"><div class="req-header" style="cursor:default;">' + pick +
+        '<div style="flex:1;"><div><span class="card-project-tag">' + escapeHtml(rep.project) + '</span> <span class="pill pending">PO · ' + members.length + ' material' + (members.length === 1 ? '' : 's') + '</span></div>' +
+        '<div class="req-title">' + escapeHtml(po.vendorName || 'Vendor') + ' · PO ' + escapeHtml(po.poNo) + '</div>' + rows + '</div>' + action + '</div></div>';
+    }
+    function toggleCancelPo(nums, checked) {
+      nums.forEach(function(n) { if (checked) cancelSelected[n] = true; else delete cancelSelected[n]; });
       updateCancelToolbar();
     }
 
@@ -3139,7 +3257,7 @@
       var btn = document.getElementById('modalConfirmBtn');
       btn.disabled = true; btn.textContent = 'Saving...';
       var doneLabelForBtn = stageDef.statusValues.done;
-      google.script.run
+      bulkRun()
         .withSuccessHandler(function(res) {
           btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn + ' (' + items.length + ')';
           var results = (res && res.results) || [];

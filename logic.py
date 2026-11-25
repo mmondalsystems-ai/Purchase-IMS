@@ -730,10 +730,12 @@ def _requests_impl(conn, current_user, is_admin, ctx):
             "entryTimestamp": fmt_dt(r["entry_timestamp"]),
             "stages": {},
         }
-        req["canCancel"] = (not req["cancelled"]) and (
-            is_admin or current_user in cancel_emails(project))
-
         po_entry = stage_data.get("poEntry")
+        # Once PO Preparation is approved the request belongs to a PO: only an admin may cancel it.
+        req["poApproved"] = bool(po_entry and po_entry["status"] == status_values("poEntry")["done"])
+        req["canCancel"] = (not req["cancelled"]) and (
+            is_admin or (current_user in cancel_emails(project) and not req["poApproved"]))
+
         po_amount = (po_entry["extras"].get("poAmount", "") if po_entry else "")
         adv_for_gating = (po_entry["extras"].get("advancePaymentRequired", "") if po_entry else "") or ""
 
@@ -1241,6 +1243,10 @@ def imsApprovalCancelRequest(user, payload):
             _, _, current, is_admin = _identity(user, payload.get("asEmail"))
             grantees = (get_access_emails(cfg.ACCESS_TYPES["cancel"], project, "ALL", ctx["access"], ctx["people"])
                         + stage_config_emails(project, ctx["stage_cfg"], ctx["people"]))
+            po_row = conn.execute("select status from ims_request_stages where sr_no = %s and stage_key = 'poEntry'",
+                                  (req["sr_no"],)).fetchone()
+            if not is_admin and po_row and po_row["status"] == status_values("poEntry")["done"]:
+                raise UserError("This request is part of a PO (PO Preparation is approved). Only an admin can cancel it.")
             if not is_admin and current not in grantees:
                 raise UserError(
                     "Only an admin, a Stage Config approver of this project, or a user with Cancel Permission in "
