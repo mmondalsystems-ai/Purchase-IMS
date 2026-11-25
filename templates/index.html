@@ -2206,12 +2206,28 @@
       }).withFailureHandler(function(err) { alert(err.message || 'Failed to approve.'); })
       .imsApprovalActOnStages({ items: members.map(function(m) { return { srNo: m.srNo, stageKey: m.stageKey }; }), asEmail: testAsEmail || '' });
     }
+    function plainPo(v) { return String(v == null ? '' : v).replace(/(\d),(?=\d{3}\b)/g, '$1'); }
+    function plainIndent(v) { return String(v == null ? '' : v).split(/\s*[,;]\s*/).filter(Boolean).join('  '); }
+    function poFlowListHtml(item, cardKey) {
+      return '<div style="padding:6px 14px;">' + item.members.map(function(m) {
+        var f = requestBySrNo(m.srNo);
+        var id = 'pf-' + cardKey + '-' + m.srNo;
+        return '<div style="border-bottom:1px solid #e5e7eb;">' +
+          '<div style="padding:8px 4px;cursor:pointer;font-weight:600;" onclick="togglePoFlow(event, \'' + id + '\')">&#9656; #' + m.srNo + ' · ' + escapeHtml(m.materialName) + '</div>' +
+          '<div id="' + id + '" style="display:none;padding:0 0 10px;">' + (f ? flowStepperHtml(f) + flowTableHtml(f, false) : '<div class="empty-state">Loading approval flow...</div>') + '</div></div>';
+      }).join('') + '</div>';
+    }
+    function togglePoFlow(ev, id) {
+      if (ev) ev.stopPropagation();
+      var el = document.getElementById(id);
+      if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
     function poMembersTableHtml(item) {
       return '<table class="po-members" style="width:100%;border-collapse:collapse;font-size:13px;">' +
         '<tr style="text-align:left;"><th style="padding:4px 8px;">Sr No</th><th style="padding:4px 8px;">Material</th><th style="padding:4px 8px;">Qty</th><th style="padding:4px 8px;">Indent No</th></tr>' +
         item.members.map(function(m) {
           var f = requestBySrNo(m.srNo) || {};
-          var ind = (f.stages && f.stages.indent && f.stages.indent.indentNo) || m.indentNo || '';
+          var ind = plainIndent((f.stages && f.stages.indent && f.stages.indent.indentNo) || m.indentNo || '');
           var qty = (m.quantity !== '' && m.quantity != null ? m.quantity : '') + (m.uom ? ' ' + m.uom : '');
           return '<tr style="border-top:1px solid #e5e7eb;"><td style="padding:4px 8px;">#' + m.srNo + '</td><td style="padding:4px 8px;">' + escapeHtml(m.materialName) +
             '</td><td style="padding:4px 8px;">' + escapeHtml(qty) + '</td><td style="padding:4px 8px;">' + escapeHtml(ind) + '</td></tr>';
@@ -2320,7 +2336,7 @@
         detailItem('Construction Type', item.constructionType) +
         detailItem('Block', item.block) +
         detailItem('LOT', item.lot) +
-        detailItem('Indent No', item.indentNo) +
+        detailItem('Indent No', plainIndent(item.indentNo)) +
         detailItem('Vendor', item.vendorName) +
         detailItem('PO Amount', formatPoAmount(item.poAmount)) +
         detailItem('PO No', item.poNo) +
@@ -2375,7 +2391,7 @@
           '<div class="qc-main">' +
             '<div class="qc-tags"><span class="card-id-badge">#' + item.srNo + '</span><span class="card-project-tag">' + escapeHtml(item.project) + '</span></div>' +
             '<div class="qc-title">' + (item.isPoGroup
-              ? escapeHtml(item.vendorName || 'Vendor') + ' · PO ' + escapeHtml(item.poNo) + ' <span style="font-weight:400;font-size:12px;">(' + item.members.length + ' material' + (item.members.length === 1 ? '' : 's') + ')</span>'
+              ? escapeHtml(item.vendorName || 'Vendor') + ' · PO ' + escapeHtml(plainPo(item.poNo)) + ' <span style="font-weight:400;font-size:12px;">(' + item.members.length + ' material' + (item.members.length === 1 ? '' : 's') + ')</span>'
               : escapeHtml(item.materialName)) + '</div>' +
             '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b>' +
               (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + '</div>' +
@@ -2389,7 +2405,7 @@
             '<button class="qc-tab' + (tab === 'flow' ? ' active' : '') + '" onclick="setQueueTab(event, \'' + cardKey + '\', \'flow\')">' + ico('flow') + 'Approval Flow</button>' +
           '</div>' +
           '<div class="qc-pane' + (tab === 'details' ? ' active' : '') + '" data-pane="details">' + (item.isPoGroup ? poMembersTableHtml(item) : buildMaterialDetailsHtml(item)) + '</div>' +
-          '<div class="qc-pane' + (tab === 'flow' ? ' active' : '') + '" data-pane="flow" style="padding:0 0 10px;">' + (item.isPoGroup ? '<div class="empty-state">Open a material from Request Details to see its own flow.</div>' : flowPane) + '</div>' +
+          '<div class="qc-pane' + (tab === 'flow' ? ' active' : '') + '" data-pane="flow" style="padding:0 0 10px;">' + (item.isPoGroup ? poFlowListHtml(item, cardKey) : flowPane) + '</div>' +
         '</div>' +
       '</div>';
     }
@@ -2438,7 +2454,7 @@
       }
       var rows = group.slice(0, TILE_PREVIEW_LIMIT).map(function(item) {
         var qty = (item.quantity !== '' && item.quantity !== undefined && item.quantity !== null) ? 'Qty ' + item.quantity + (item.uom ? ' ' + item.uom : '') : '';
-        var gname = item.isPoGroup ? (item.vendorName || 'Vendor') + ' · PO ' + item.poNo : item.materialName;
+        var gname = item.isPoGroup ? (item.vendorName || 'Vendor') + ' · PO ' + plainPo(item.poNo) : item.materialName;
         var gsub = item.isPoGroup ? item.members.length + ' materials · ' + item.project : '#' + item.srNo + ' · ' + item.project;
         if (item.isPoGroup) qty = '';
         return '<div class="glass-item"><div class="glass-item-main">' +
@@ -2761,7 +2777,7 @@
           ' onchange="toggleCancelPo([' + nums.join(',') + '], this.checked)"></label>'
         : '<span class="queue-select-placeholder"></span>';
       var rows = members.map(function(m) {
-        var ind = (m.stages && m.stages.indent && m.stages.indent.indentNo) || '';
+        var ind = plainIndent((m.stages && m.stages.indent && m.stages.indent.indentNo) || '');
         return '<div class="req-sub">#' + m.srNo + ' · ' + escapeHtml(m.materialName) + ' · Qty ' + escapeHtml(String(m.quantity)) + (m.uom ? ' ' + escapeHtml(m.uom) : '') +
           (ind ? ' · Indent ' + escapeHtml(ind) : '') + '</div>';
       }).join('');
@@ -2770,7 +2786,7 @@
         : '<span class="restricted-note">Only an admin can cancel a PO</span>';
       return '<div class="req-card"><div class="req-header" style="cursor:default;">' + pick +
         '<div style="flex:1;"><div><span class="card-project-tag">' + escapeHtml(rep.project) + '</span> <span class="pill pending">PO · ' + members.length + ' material' + (members.length === 1 ? '' : 's') + '</span></div>' +
-        '<div class="req-title">' + escapeHtml(po.vendorName || 'Vendor') + ' · PO ' + escapeHtml(po.poNo) + '</div>' + rows + '</div>' + action + '</div></div>';
+        '<div class="req-title">' + escapeHtml(po.vendorName || 'Vendor') + ' · PO ' + escapeHtml(plainPo(po.poNo)) + '</div>' + rows + '</div>' + action + '</div></div>';
     }
     function toggleCancelPo(nums, checked) {
       nums.forEach(function(n) { if (checked) cancelSelected[n] = true; else delete cancelSelected[n]; });
