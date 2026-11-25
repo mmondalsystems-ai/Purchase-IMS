@@ -2462,6 +2462,47 @@
       renderQueueTiles();
     }
 
+    /** Bulk approval in small batches (10 requests per server call): one huge call can time out on the server,
+     * and a failure in one batch must not lose the others. Same chain style as google.script.run. */
+    function bulkRun() {
+      var handlers = {};
+      var api = {
+        withSuccessHandler: function(f) { handlers.ok = f; return api; },
+        withFailureHandler: function(f) { handlers.fail = f; return api; }
+      };
+      ['imsApprovalActOnStages', 'imsApprovalActOnStagesWithSharedFields'].forEach(function(method) {
+        api[method] = function(payload) {
+          var rest = (payload.items || []).slice(), merged = [], SIZE = 10;
+          function failPart(part, msg) {
+            part.forEach(function(i) { merged.push({ srNo: i.srNo, stageKey: i.stageKey, success: false, error: msg }); });
+          }
+          function finish() {
+            var ok = merged.filter(function(r) { return r.success; }).length;
+            handlers.ok && handlers.ok({ success: ok === merged.length, successCount: ok, failureCount: merged.length - ok, results: merged });
+          }
+          function next() {
+            if (!rest.length) { finish(); return; }
+            var part = rest.splice(0, SIZE);
+            var p = {}; Object.keys(payload).forEach(function(k) { p[k] = payload[k]; }); p.items = part;
+            google.script.run
+              .withSuccessHandler(function(res) {
+                if (res && res.results && res.results.length) merged = merged.concat(res.results);
+                else failPart(part, (res && res.error) || 'Failed.');
+                next();
+              })
+              .withFailureHandler(function(err) {
+                var msg = (err && err.message) || 'Server did not respond. Please check and try again.';
+                if (!merged.length) { handlers.fail && handlers.fail(err); return; }
+                failPart(part.concat(rest), msg); rest = [];
+                finish();
+              })[method](p);
+          }
+          next();
+        };
+      });
+      return api;
+    }
+
     function bulkApproveSelected(stageKey) {
       var selectedItems = getBulkSelectableItems(stageKey).filter(function(item) {
         return !!selectedQueueItems[queueItemKey(item.stageKey, item.srNo)];
@@ -2480,7 +2521,7 @@
 
       var btn = document.getElementById('bulkApproveBtn');
       if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
-      google.script.run
+      bulkRun()
         .withSuccessHandler(function(res) {
           var results = (res && res.results) || [];
           var successful = results.filter(function(r) { return r.success; });
@@ -3048,7 +3089,7 @@
       var doneLabelForBtn = modalCtx.stageDef.statusValues.done;
       var actedSrNo = modalCtx.srNo;
       var actedStageKey = modalCtx.stageKey;
-      google.script.run
+      bulkRun()
         .withSuccessHandler(function(res) {
           btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn;
           if (res.success) {
