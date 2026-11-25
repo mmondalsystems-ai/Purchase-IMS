@@ -2207,7 +2207,7 @@
       .imsApprovalActOnStages({ items: members.map(function(m) { return { srNo: m.srNo, stageKey: m.stageKey }; }), asEmail: testAsEmail || '' });
     }
     function plainPo(v) { return String(v == null ? '' : v).replace(/(\d),(?=\d{3}\b)/g, '$1'); }
-    function plainIndent(v) { return String(v == null ? '' : v).split(/\s*[,;]\s*/).filter(Boolean).join('  '); }
+    function plainIndent(v) { return String(v == null ? '' : v).replace(/(\d)\s*,\s*(?=\d)/g, '$1'); }
     function poFlowListHtml(item, cardKey) {
       return '<div style="padding:6px 14px;">' + item.members.map(function(m) {
         var f = requestBySrNo(m.srNo);
