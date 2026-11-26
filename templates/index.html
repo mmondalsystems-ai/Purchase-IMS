@@ -2222,6 +2222,12 @@
       var el = document.getElementById(id);
       if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     }
+    function poAmtText(item) {
+      var f = requestBySrNo(item.srNo);
+      var v = (f && f.stages && f.stages.poEntry && f.stages.poEntry.poAmount);
+      if (v === undefined || v === null || v === '') v = item.poAmount;
+      return formatPoAmount(v);
+    }
     function poMembersTableHtml(item) {
       return '<table class="po-members" style="width:100%;border-collapse:collapse;font-size:13px;">' +
         '<tr style="text-align:left;"><th style="padding:4px 8px;">Sr No</th><th style="padding:4px 8px;">Material</th><th style="padding:4px 8px;">Qty</th><th style="padding:4px 8px;">Indent No</th></tr>' +
@@ -2395,7 +2401,7 @@
               : escapeHtml(item.materialName)) + '</div>' +
             '<div class="qc-sub">Pending at: <b>' + escapeHtml(item.stageName || s.name) + '</b>' +
               (item.approver ? ' &nbsp;|&nbsp; Assigned to: <b>' + escapeHtml(item.approver) + '</b>' : '') + '</div>' +
-            '<div class="qc-sub">Planned: ' + escapeHtml(item.planned || '—') + (item.estimatedDeliveryDate ? ' &nbsp;|&nbsp; EDD: ' + escapeHtml(item.estimatedDeliveryDate) : '') + '</div>' +
+            '<div class="qc-sub">Planned: ' + escapeHtml(item.planned || '—') + (poAmtText(item) ? ' &nbsp;|&nbsp; PO Amount: <b>' + escapeHtml(poAmtText(item)) + '</b>' : '') + (item.estimatedDeliveryDate ? ' &nbsp;|&nbsp; EDD: ' + escapeHtml(item.estimatedDeliveryDate) : '') + '</div>' +
           '</div>' +
           '<div class="qc-right">' + rightHtml + '</div>' +
         '</div>' +
@@ -3230,7 +3236,7 @@
       var doneLabelForBtn = modalCtx.stageDef.statusValues.done;
       var actedSrNo = modalCtx.srNo;
       var actedStageKey = modalCtx.stageKey;
-      bulkRun()
+      google.script.run
         .withSuccessHandler(function(res) {
           btn.disabled = false; btn.textContent = 'Confirm ' + doneLabelForBtn;
           if (res.success) {
