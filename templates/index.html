@@ -1067,6 +1067,7 @@
             </div>
             <div class="field"><button class="btn" id="repGenerateBtn" onclick="generateNonPlannedReport()">Generate</button></div>
             <div class="field"><button class="btn outline" id="repPrintBtn" onclick="printNonPlannedReport()" disabled>Print</button></div>
+            <div class="field"><button class="btn outline" id="repExcelBtn" onclick="downloadNonPlannedExcel()" disabled>Download Excel</button></div>
           </div>
           <div class="msg" id="repMsg"></div>
           <div id="repPrintHeader" class="rep-print-header"></div>
@@ -2690,7 +2691,7 @@
     function generateNonPlannedReport() {
       var f = reportFilters(), msg = document.getElementById('repMsg'), box = document.getElementById('repResult');
       msg.className = 'msg'; msg.textContent = '';
-      document.getElementById('repPrintBtn').disabled = true;
+      document.getElementById('repPrintBtn').disabled = true; document.getElementById('repExcelBtn').disabled = true;
       box.innerHTML = '<div class="spinner"></div>';
       google.script.run
         .withSuccessHandler(function(res) {
@@ -2722,7 +2723,26 @@
         if (g.project === 'HO + Orchard Amritaya') html += '<div class="rep-page-end"></div>';
       });
       box.innerHTML = html;
-      document.getElementById('repPrintBtn').disabled = false;
+      document.getElementById('repPrintBtn').disabled = false; document.getElementById('repExcelBtn').disabled = false;
+    }
+
+    function downloadNonPlannedExcel() {
+      var btn = document.getElementById('repExcelBtn'), msg = document.getElementById('repMsg');
+      btn.disabled = true; btn.textContent = 'Preparing...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btn.disabled = false; btn.textContent = 'Download Excel';
+          if (!res || !res.success) { msg.className = 'msg error'; msg.textContent = (res && res.error) || 'Failed.'; return; }
+          var bin = atob(res.data), bytes = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob); a.download = res.filename || 'Non_Planned_Report.xlsx';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+        })
+        .withFailureHandler(function(err) { btn.disabled = false; btn.textContent = 'Download Excel'; msg.className = 'msg error'; msg.textContent = err.message || 'Failed.'; })
+        .imsReportNonPlannedXlsx(reportFilters(), testAsEmail || '');
     }
 
     function repDmy(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '-' + p[1] + '-' + p[0] : iso; }

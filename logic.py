@@ -1448,6 +1448,58 @@ def imsReportNonPlanned(user, payload, asEmail=None):
         return {"success": False, "error": str(err)}
 
 
+def imsReportNonPlannedXlsx(user, payload, asEmail=None):
+    """Same data as the Generate Report page, returned as a base64 .xlsx (page 1: HO + Orchard Amritaya, page 2: other projects)."""
+    import base64, io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    try:
+        rep = _non_planned_report(user, payload, asEmail)
+    except UserError as err:
+        return {"success": False, "error": str(err)}
+    head = ["DATE", "Project", "Point of Usage", "Task Name", "PARTICULARS", "PO No", "QTY", "AMT"]
+    hfill = PatternFill("solid", fgColor="1F3A5F")
+    wb = Workbook()
+    ws_ho = wb.active
+    ws_ho.title = "HO + Orchard Amritaya"
+    ws_other = wb.create_sheet("Other Projects")
+
+    def block(ws, g):
+        r = ws.max_row + 2 if ws.max_row > 1 or ws["A1"].value else 1
+        ws.cell(r, 1, g["project"]).font = Font(bold=True, size=13, color="1E3A8A")
+        r += 1
+        for i, h in enumerate(head, 1):
+            c = ws.cell(r, i, h)
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = hfill
+        for row in g["rows"]:
+            r += 1
+            amt = row["amount"] if row.get("amount") is not None else (row.get("amountText") or "")
+            vals = [row.get("date"), row.get("project"), row.get("pointOfUsage"), row.get("taskName"),
+                    row.get("particulars"), row.get("poNo"), row.get("qty"), amt]
+            for i, v in enumerate(vals, 1):
+                c = ws.cell(r, i, v)
+                if i == 8 and isinstance(v, (int, float)):
+                    c.number_format = "#,##0.00"
+        r += 1
+        ws.cell(r, 1, g["project"] + " - Total").font = Font(bold=True)
+        t = ws.cell(r, 8, g["total"])
+        t.font = Font(bold=True)
+        t.number_format = "#,##0.00"
+
+    for g in rep["projects"]:
+        block(ws_ho if g["project"] == "HO + Orchard Amritaya" else ws_other, g)
+    for ws in (ws_ho, ws_other):
+        for col, w in zip("ABCDEFGH", (13, 20, 28, 34, 40, 22, 12, 16)):
+            ws.column_dimensions[col].width = w
+        for row in ws.iter_rows():
+            for c in row:
+                c.alignment = Alignment(vertical="top", wrap_text=True)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return {"success": True, "filename": "Non_Planned_Report.xlsx", "data": base64.b64encode(buf.getvalue()).decode()}
+
+
 # ---------------------------------------------------------------------------
 # Registry used by app.py:  name -> (function, needs_user)
 # ---------------------------------------------------------------------------
@@ -1476,4 +1528,5 @@ API = {
     "imsApprovalCancelMany": (imsApprovalCancelMany, True),
     "imsReportAccess": (imsReportAccess, True),
     "imsReportNonPlanned": (imsReportNonPlanned, True),
+    "imsReportNonPlannedXlsx": (imsReportNonPlannedXlsx, True),
 }
