@@ -543,7 +543,10 @@
       body.printing-report .rep-table tr { page-break-inside:avoid; }
       body.printing-report .rep-group-title { break-after:avoid; }
       body.printing-report .rep-page-end { break-after:page; page-break-after:always; }
-      body.printing-report .rep-group { break-inside:avoid; }
+      body.printing-report #testAsBanner { display:none !important; }
+      body.printing-report .rep-wrap { break-inside:auto; }
+      body.printing-report .rep-group-title { break-after:avoid; page-break-after:avoid; }
+      body.printing-report .rep-print-header { margin-bottom:0; }
     }
     .cancel-details { margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; color:#7f1d1d; display:flex; flex-wrap:wrap; gap:6px 24px; }
     .cancel-details .cancel-label { font-weight:700; color:#b91c1c; margin-right:6px; }
