@@ -525,7 +525,6 @@
     .rep-table td.num, .rep-table th.num { text-align:right; white-space:nowrap; }
     .rep-table tr.rep-total td { background:#e8eef7; font-weight:700; }
     .rep-print-header { display:none; }
-    #repPrintAll { display:none; }
     @media print {
       @page { size: A4 landscape; margin: 10mm; }
       body.printing-report #sidebar, body.printing-report #topbar, body.printing-report .page-header,
@@ -543,10 +542,8 @@
       body.printing-report .rep-table thead { display:table-header-group; }
       body.printing-report .rep-table tr { page-break-inside:avoid; }
       body.printing-report .rep-group-title { break-after:avoid; }
-      body.printing-report #repResult { display:none !important; }
-      body.printing-report #repPrintAll { display:block; }
-      body.printing-report #repPrintAll .rep-table { font-size:9.5px; }
-      body.printing-report #repPrintAll .rep-table td, body.printing-report #repPrintAll .rep-table th { padding:3px 6px; }
+      body.printing-report .rep-page-end { break-after:page; page-break-after:always; }
+      body.printing-report .rep-group { break-inside:avoid; }
     }
     .cancel-details { margin-top:8px; padding:8px 12px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; color:#7f1d1d; display:flex; flex-wrap:wrap; gap:6px 24px; }
     .cancel-details .cancel-label { font-weight:700; color:#b91c1c; margin-right:6px; }
@@ -1068,7 +1065,6 @@
           <div class="msg" id="repMsg"></div>
           <div id="repPrintHeader" class="rep-print-header"></div>
           <div id="repResult"></div>
-          <div id="repPrintAll"></div>
         </div>
 
         <!-- CANCEL ENTRY -->
@@ -2705,33 +2701,21 @@
       var html = '<div class="req-sub" style="margin-bottom:6px;">' + rep.rowCount + ' item(s) &middot; Grand Total: <b>' + repMoney(rep.grandTotal) + '</b>' +
         (rep.unparsedCount ? ' &middot; <span style="color:#b91c1c;">' + rep.unparsedCount + ' PO amount(s) are not a plain number and are not in the total</span>' : '') +
         (rep.recoveredCount ? '<br>* ' + rep.recoveredCount + ' amount(s) were saved as a date by the sheet and have been converted back to the number. Please verify.' : '') + '</div>';
-      rep.projects.forEach(function(g) {
-        html += '<div class="rep-group-title">' + escapeHtml(g.project) + '</div><div class="rep-wrap"><table class="rep-table"><thead><tr>' +
+      var ordered = rep.projects.slice().sort(function(a, b) {
+        return (a.project === 'HO + Orchard Amritaya' ? 0 : 1) - (b.project === 'HO + Orchard Amritaya' ? 0 : 1);
+      });
+      ordered.forEach(function(g) {
+        html += '<div class="rep-group">' + '<div class="rep-group-title">' + escapeHtml(g.project) + '</div><div class="rep-wrap"><table class="rep-table"><thead><tr>' +
           '<th>DATE</th><th>Project</th><th>Point of Usage</th><th>Task Name</th><th>PARTICULARS</th><th>PO No</th><th>QTY</th><th class="num">AMT</th></tr></thead><tbody>';
         g.rows.forEach(function(r) {
           var amt = r.amount !== null ? repMoney(r.amount) + (r.amountRecovered ? ' *' : '') : (r.amountText ? escapeHtml(r.amountText) : '');
           html += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(r.project) + '</td><td>' + escapeHtml(r.pointOfUsage) + '</td><td>' + escapeHtml(r.taskName) +
             '</td><td>' + escapeHtml(r.particulars) + '</td><td>' + escapeHtml(r.poNo) + '</td><td>' + escapeHtml(r.qty) + '</td><td class="num">' + amt + '</td></tr>';
         });
-        html += '<tr class="rep-total"><td colspan="7">' + escapeHtml(g.project) + ' - Total</td><td class="num">' + repMoney(g.total) + '</td></tr></tbody></table></div>';
+        html += '<tr class="rep-total"><td colspan="7">' + escapeHtml(g.project) + ' - Total</td><td class="num">' + repMoney(g.total) + '</td></tr></tbody></table></div></div>';
+        if (g.project === 'HO + Orchard Amritaya') html += '<div class="rep-page-end"></div>';
       });
       box.innerHTML = html;
-      // Print version: ONE consolidated table, HO + Orchard Amritaya first, then all other projects.
-      var groups = rep.projects.slice().sort(function(a, b) {
-        var ah = a.project === 'HO + Orchard Amritaya' ? 0 : 1, bh = b.project === 'HO + Orchard Amritaya' ? 0 : 1;
-        return ah - bh;
-      });
-      var all = '<div class="rep-wrap"><table class="rep-table"><thead><tr>' +
-        '<th>DATE</th><th>Project</th><th>Point of Usage</th><th>Task Name</th><th>PARTICULARS</th><th>PO No</th><th>QTY</th><th class="num">AMT</th></tr></thead><tbody>';
-      groups.forEach(function(g) {
-        g.rows.forEach(function(r) {
-          var amt = r.amount !== null ? repMoney(r.amount) + (r.amountRecovered ? ' *' : '') : (r.amountText ? escapeHtml(r.amountText) : '');
-          all += '<tr><td>' + escapeHtml(r.date) + '</td><td>' + escapeHtml(r.project) + '</td><td>' + escapeHtml(r.pointOfUsage) + '</td><td>' + escapeHtml(r.taskName) +
-            '</td><td>' + escapeHtml(r.particulars) + '</td><td>' + escapeHtml(r.poNo) + '</td><td>' + escapeHtml(r.qty) + '</td><td class="num">' + amt + '</td></tr>';
-        });
-      });
-      all += '<tr class="rep-total"><td colspan="7">Grand Total</td><td class="num">' + repMoney(rep.grandTotal) + '</td></tr></tbody></table></div>';
-      document.getElementById('repPrintAll').innerHTML = all;
       document.getElementById('repPrintBtn').disabled = false;
     }
 
